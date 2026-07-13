@@ -127,7 +127,7 @@ export function stepGestureMachine(
   }
 
   if (previous.state === 'TRACKING_LOST' || previous.state === 'IDLE') {
-    commands.push({ type: 'APPEND_POINT', point: indexTip })
+    commands.push({ type: 'APPEND_POINT', point: indexTip, timestamp: frame.timestamp })
     return {
       machine: {
         ...previous,
@@ -147,9 +147,9 @@ export function stepGestureMachine(
     const downFrames = pinchRatio <= downThreshold ? previous.downFrames + 1 : 0
     const shouldStart = downFrames >= 2
     if (shouldStart) {
-      commands.push({ type: 'START_STROKE', point: indexTip })
+      commands.push({ type: 'START_STROKE', point: indexTip, timestamp: frame.timestamp })
     } else {
-      commands.push({ type: 'APPEND_POINT', point: indexTip })
+      commands.push({ type: 'APPEND_POINT', point: indexTip, timestamp: frame.timestamp })
     }
 
     return {
@@ -177,7 +177,7 @@ export function stepGestureMachine(
   if (shouldEnd) {
     commands.push({ type: 'END_STROKE', reason: 'pinch-up' })
   } else if (!isReleaseCandidate) {
-    commands.push({ type: 'APPEND_POINT', point: indexTip })
+    commands.push({ type: 'APPEND_POINT', point: indexTip, timestamp: frame.timestamp })
   }
 
   return {

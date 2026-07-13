@@ -46,6 +46,29 @@ select:focus-visible {
   padding: 18px;
 }
 
+.blocking-banner {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--red);
+  color: #8b2d1f;
+  background: rgba(217, 74, 50, 0.08);
+  font-size: 12px;
+}
+
+.workspace-toast {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  z-index: 20;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(45, 122, 86, 0.5);
+  color: #245f45;
+  background: rgba(246, 241, 228, 0.96);
+  box-shadow: 0 12px 32px rgba(19, 33, 38, 0.14);
+  font-size: 12px;
+}
+
 .top-bar {
   min-height: 96px;
   display: grid;
@@ -137,6 +160,48 @@ select:focus-visible {
   gap: 8px;
 }
 
+.top-bar__actions button,
+.tool-action,
+.width-options button,
+.input-mode-switch button,
+.calibration-actions button {
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.42);
+  cursor: pointer;
+}
+
+.top-bar__actions button:disabled,
+.input-mode-switch button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.top-bar__actions .danger-action:not(:disabled) {
+  border-color: rgba(217, 74, 50, 0.6);
+  color: var(--red);
+}
+
+.history-action {
+  display: grid;
+  gap: 1px;
+  min-width: 104px;
+  text-align: left;
+}
+
+.history-action strong {
+  font-size: 12px;
+}
+
+.history-action span {
+  color: var(--muted);
+  font-family: Georgia, serif;
+  font-size: 9px;
+}
+
 .workspace-layout {
   min-height: calc(100vh - 132px);
   display: grid;
@@ -202,6 +267,26 @@ select:focus-visible {
   font-size: 12px;
 }
 
+.tool-action {
+  display: grid;
+  gap: 5px;
+  justify-items: start;
+  min-height: 58px;
+  padding: 10px;
+}
+
+.tool-action span {
+  color: var(--red);
+  font-family: Georgia, serif;
+  font-size: 11px;
+  font-style: italic;
+}
+
+.tool-action--active {
+  border-color: var(--ink);
+  background: rgba(19, 33, 38, 0.08);
+}
+
 .toolbar-footnote {
   color: var(--blue);
   font-family: Georgia, serif;
@@ -232,12 +317,21 @@ select:focus-visible {
   pointer-events: none;
 }
 
-.m0-canvas {
+.workspace-canvas {
   position: absolute;
   inset: 0;
   z-index: 1;
   width: 100%;
   height: 100%;
+}
+
+.workspace-canvas--mouse {
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.workspace-canvas--gesture {
+  cursor: default;
 }
 
 .tracking-cursor {
@@ -259,6 +353,26 @@ select:focus-visible {
   border-color: var(--ink);
   background: var(--ink);
 }
+
+.calibration-target {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--red);
+  border-radius: 50%;
+  color: var(--red);
+  background: rgba(246, 241, 228, 0.88);
+  font-family: Georgia, serif;
+  pointer-events: none;
+}
+
+.calibration-target--0 { top: 18%; left: 18%; }
+.calibration-target--1 { top: 18%; right: 18%; }
+.calibration-target--2 { right: 18%; bottom: 18%; }
+.calibration-target--3 { bottom: 18%; left: 18%; }
 
 .canvas-stage__index,
 .canvas-stage__coordinates {
@@ -517,6 +631,45 @@ select:focus-visible {
   background: var(--red);
 }
 
+.input-mode-switch,
+.width-options,
+.calibration-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.input-mode-switch .is-active,
+.width-options .is-active {
+  border-color: var(--ink);
+  color: var(--paper);
+  background: var(--ink);
+}
+
+.gesture-setup-callout {
+  margin: 0 0 10px;
+  padding: 10px;
+  border: 1px solid rgba(23, 63, 95, 0.3);
+  background: rgba(23, 63, 95, 0.06);
+}
+
+.gesture-setup-callout p {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.gesture-setup-callout button {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--blue);
+  color: var(--paper);
+  background: var(--blue);
+  cursor: pointer;
+}
+
 .panel-state--running {
   border-color: rgba(45, 122, 86, 0.4);
   color: #2d7a56;
@@ -617,6 +770,41 @@ select:focus-visible {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
+}
+
+.field-label {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.width-options {
+  grid-template-columns: repeat(3, 1fr);
+  margin: 0;
+}
+
+.calibration-message,
+.calibration-progress {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.calibration-progress {
+  color: var(--blue);
+  font-family: Georgia, serif;
+}
+
+.calibration-actions {
+  margin-bottom: 0;
+}
+
+.calibration-actions .secondary-action {
+  color: var(--muted);
+  background: transparent;
 }
 
 .color-row {

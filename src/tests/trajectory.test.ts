@@ -15,6 +15,12 @@ describe('M0 trajectory processing', () => {
     expect(applyEma({ x: 10, y: 20 }, { x: 30, y: 40 })).toEqual({ x: 20, y: 30 })
   })
 
+  it('maps a calibrated ROI across the full canvas', () => {
+    const roi = { left: 0.2, top: 0.2, right: 0.8, bottom: 0.8 }
+    expect(mapMirroredPoint({ x: 0.2, y: 0.2 }, 100, 100, roi)).toEqual({ x: 100, y: 0 })
+    expect(mapMirroredPoint({ x: 0.8, y: 0.8 }, 100, 100, roi)).toEqual({ x: 0, y: 100 })
+  })
+
   it('suppresses vertical jitter during horizontal movement', () => {
     expect(applyAxisAwareEma({ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 10, y: 2 })).toEqual({
       x: 6.2,

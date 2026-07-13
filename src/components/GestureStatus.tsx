@@ -19,7 +19,7 @@ export function GestureStatus({ diagnostics }: GestureStatusProps) {
           <p className="panel-number">02</p>
           <h2 id="gesture-title">手势状态</h2>
         </div>
-        <span className="panel-state">M0 诊断</span>
+        <span className="panel-state">本地识别</span>
       </div>
 
       <div className={`gesture-readout gesture-readout--${diagnostics.gestureState.toLowerCase()}`}>

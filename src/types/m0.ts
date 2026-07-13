@@ -36,8 +36,8 @@ export interface HandFrame {
 }
 
 export type GestureCommand =
-  | { type: 'START_STROKE'; point: NormalizedPoint }
-  | { type: 'APPEND_POINT'; point: NormalizedPoint }
+  | { type: 'START_STROKE'; point: NormalizedPoint; timestamp: number }
+  | { type: 'APPEND_POINT'; point: NormalizedPoint; timestamp: number }
   | { type: 'END_STROKE'; reason: 'pinch-up' | 'tracking-lost' | 'frame-gap' | 'stopped' }
 
 export interface GestureMachineState {

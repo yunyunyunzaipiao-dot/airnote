@@ -1,4 +1,5 @@
 import type { CanvasPoint, NormalizedPoint } from '../types/m0'
+import type { WritingROI } from '../types/workspace'
 
 export const DEFAULT_EMA_ALPHA = 0.5
 export const HORIZONTAL_FORWARD_ALPHA = 0.62
@@ -10,6 +11,7 @@ export function mapMirroredPoint(
   point: NormalizedPoint,
   width: number,
   height: number,
+  roi: WritingROI = { left: 0, top: 0, right: 1, bottom: 1 },
 ): CanvasPoint | null {
   if (
     !Number.isFinite(point.x) ||
@@ -24,8 +26,14 @@ export function mapMirroredPoint(
     return null
   }
 
-  const mirroredX = Math.min(1, Math.max(0, 1 - point.x))
-  const clampedY = Math.min(1, Math.max(0, point.y))
+  const roiWidth = roi.right - roi.left
+  const roiHeight = roi.bottom - roi.top
+  if (roiWidth < 0.25 || roiHeight < 0.25) return null
+
+  const normalizedX = (point.x - roi.left) / roiWidth
+  const normalizedY = (point.y - roi.top) / roiHeight
+  const mirroredX = Math.min(1, Math.max(0, 1 - normalizedX))
+  const clampedY = Math.min(1, Math.max(0, normalizedY))
   return { x: mirroredX * width, y: clampedY * height }
 }
 

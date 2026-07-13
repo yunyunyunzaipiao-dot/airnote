@@ -1,13 +1,19 @@
 import type { RefObject } from 'react'
 import type { CameraSettings, CameraStatus } from '../types/m0'
+import type { InputMode } from '../types/workspace'
 
 interface CameraPreviewProps {
   status: CameraStatus
   settings: CameraSettings
   errorMessage: string | null
+  inputMode: InputMode
+  canUseGesture: boolean
   videoRef: RefObject<HTMLVideoElement | null>
   onEnable: () => void
   onDisable: () => void
+  onInputModeChange: (mode: InputMode) => void
+  onGestureRequest: () => void
+  onUseDefaultCalibration: () => void
 }
 
 const statusLabels: Record<CameraStatus, string> = {
@@ -23,9 +29,14 @@ export function CameraPreview({
   status,
   settings,
   errorMessage,
+  inputMode,
+  canUseGesture,
   videoRef,
   onEnable,
   onDisable,
+  onInputModeChange,
+  onGestureRequest,
+  onUseDefaultCalibration,
 }: CameraPreviewProps) {
   const isBusy = status === 'requesting' || status === 'loading-model'
   const isRunning = status === 'running'
@@ -51,7 +62,7 @@ export function CameraPreview({
         <div className="camera-corners" aria-hidden="true" />
       </div>
 
-      <p className="privacy-note">视频仅用于浏览器本地手部识别。只有点击下方按钮后才会请求权限。</p>
+      <p className="privacy-note">视频只用于浏览器本地手部识别。只有点击启用后才会请求权限。</p>
       {settings.width && settings.height ? (
         <p className="camera-metadata">
           实际输入 {settings.width}×{settings.height}
@@ -59,6 +70,34 @@ export function CameraPreview({
         </p>
       ) : null}
       {errorMessage ? <p className="inline-error" role="alert">{errorMessage}</p> : null}
+
+      <div className="input-mode-switch" role="group" aria-label="输入模式">
+        <button
+          type="button"
+          aria-pressed={inputMode === 'mouse'}
+          className={inputMode === 'mouse' ? 'is-active' : ''}
+          onClick={() => onInputModeChange('mouse')}
+        >
+          鼠标模式
+        </button>
+        <button
+          type="button"
+          aria-pressed={inputMode === 'gesture'}
+          className={inputMode === 'gesture' ? 'is-active' : ''}
+          onClick={canUseGesture ? () => onInputModeChange('gesture') : onGestureRequest}
+          disabled={!isRunning}
+          title={!canUseGesture ? '点击开始或继续手势校准' : '切换到手势模式'}
+        >
+          {canUseGesture ? '手势模式' : '设置手势模式'}
+        </button>
+      </div>
+
+      {isRunning && !canUseGesture ? (
+        <div className="gesture-setup-callout" role="status">
+          <p>手势画笔需要先完成校准。也可以明确使用默认参数立即启用。</p>
+          <button type="button" onClick={onUseDefaultCalibration}>直接使用默认参数</button>
+        </div>
+      ) : null}
 
       {isRunning ? (
         <button className="camera-action camera-action--stop" type="button" onClick={onDisable}>

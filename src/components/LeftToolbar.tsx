@@ -1,23 +1,19 @@
 import { DisabledAction } from './DisabledAction'
 
-const tools = [
-  { label: '选择', symbol: '01' },
-  { label: '画笔', symbol: '02' },
-  { label: '卡片', symbol: '03' },
-  { label: '连线', symbol: '04' },
-]
-
 export function LeftToolbar() {
   return (
     <aside className="left-toolbar" aria-label="左侧工具栏">
-      <div className="vertical-caption" aria-hidden="true">TOOLS / 暂未实现</div>
+      <div className="vertical-caption" aria-hidden="true">TOOLS / P0</div>
       <div className="tool-stack">
-        {tools.map((tool) => (
-          <DisabledAction key={tool.label} label={tool.label} symbol={tool.symbol} />
-        ))}
+        <DisabledAction label="选择" symbol="01" />
+        <button className="tool-action tool-action--active" type="button" aria-pressed="true">
+          <span>02</span>
+          <strong>画笔</strong>
+        </button>
+        <DisabledAction label="卡片（暂未实现）" symbol="03" />
+        <DisabledAction label="连线（暂未实现）" symbol="04" />
       </div>
-      <div className="toolbar-footnote">MVP<br />FOUNDATION</div>
+      <div className="toolbar-footnote">M1<br />STROKE</div>
     </aside>
   )
 }
-

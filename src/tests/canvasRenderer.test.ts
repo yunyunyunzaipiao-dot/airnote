@@ -1,124 +1,74 @@
 import { describe, expect, it, vi } from 'vitest'
-import { DiagnosticCanvasRenderer } from '../drawing/canvasRenderer'
+import { StrokeCanvasRenderer } from '../drawing/canvasRenderer'
 
-describe('diagnostic canvas renderer', () => {
-  it('draws accepted points directly through Canvas 2D', () => {
-    const context = {
-      setTransform: vi.fn(),
-      clearRect: vi.fn(),
-      beginPath: vi.fn(),
-      moveTo: vi.fn(),
-      lineTo: vi.fn(),
-      quadraticCurveTo: vi.fn(),
-      stroke: vi.fn(),
-      strokeStyle: '',
-      lineWidth: 0,
-      lineCap: 'butt',
-      lineJoin: 'miter',
-    } as unknown as CanvasRenderingContext2D
-    const canvas = document.createElement('canvas')
-    Object.defineProperty(canvas, 'clientWidth', { value: 100 })
-    Object.defineProperty(canvas, 'clientHeight', { value: 100 })
-    vi.spyOn(canvas, 'getContext').mockReturnValue(context)
+function createRenderer() {
+  const context = {
+    setTransform: vi.fn(),
+    clearRect: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    quadraticCurveTo: vi.fn(),
+    stroke: vi.fn(),
+    strokeStyle: '',
+    lineWidth: 0,
+    lineCap: 'butt',
+    lineJoin: 'miter',
+  } as unknown as CanvasRenderingContext2D
+  const canvas = document.createElement('canvas')
+  Object.defineProperty(canvas, 'clientWidth', { value: 100 })
+  Object.defineProperty(canvas, 'clientHeight', { value: 100 })
+  vi.spyOn(canvas, 'getContext').mockReturnValue(context)
+  const renderer = new StrokeCanvasRenderer()
+  renderer.attach(canvas)
+  return { renderer, context }
+}
 
-    const renderer = new DiagnosticCanvasRenderer()
-    renderer.attach(canvas)
-    renderer.handle({ type: 'START_STROKE', point: { x: 0.8, y: 0.2 } })
-    renderer.handle({ type: 'APPEND_POINT', point: { x: 0.7, y: 0.3 } })
+describe('stroke canvas renderer', () => {
+  it('returns a formal gesture Stroke only after pen-up', () => {
+    const { renderer, context } = createRenderer()
+    renderer.handleGesture({ type: 'START_STROKE', point: { x: 0.8, y: 0.2 }, timestamp: 10 })
+    renderer.handleGesture({ type: 'APPEND_POINT', point: { x: 0.7, y: 0.3 }, timestamp: 20 })
+    const stroke = renderer.handleGesture({ type: 'END_STROKE', reason: 'pinch-up' })
 
-    expect(context.beginPath).toHaveBeenCalledTimes(1)
-    const [moveX, moveY] = vi.mocked(context.moveTo).mock.calls[0]
-    const [lineX, lineY] = vi.mocked(context.lineTo).mock.calls[0]
-    expect(moveX).toBeCloseTo(20)
-    expect(moveY).toBeCloseTo(20)
-    expect(lineX).toBeCloseTo(22.5)
-    expect(lineY).toBeCloseTo(22.5)
-    expect(context.stroke).toHaveBeenCalledTimes(1)
+    expect(stroke).toMatchObject({ color: '#172B3A', width: 4, style: 'ink' })
+    expect(stroke?.points).toHaveLength(2)
+    expect(stroke?.points[0].x).toBeCloseTo(20)
+    expect(stroke?.points[0].y).toBeCloseTo(20)
+    expect(stroke?.points[0].t).toBe(10)
+    expect(context.stroke).toHaveBeenCalled()
   })
 
-  it('does not draw sub-two-pixel movement', () => {
-    const context = {
-      setTransform: vi.fn(),
-      clearRect: vi.fn(),
-      beginPath: vi.fn(),
-      moveTo: vi.fn(),
-      lineTo: vi.fn(),
-      quadraticCurveTo: vi.fn(),
-      stroke: vi.fn(),
-      strokeStyle: '',
-      lineWidth: 0,
-      lineCap: 'butt',
-      lineJoin: 'miter',
-    } as unknown as CanvasRenderingContext2D
-    const canvas = document.createElement('canvas')
-    Object.defineProperty(canvas, 'clientWidth', { value: 100 })
-    Object.defineProperty(canvas, 'clientHeight', { value: 100 })
-    vi.spyOn(canvas, 'getContext').mockReturnValue(context)
-
-    const renderer = new DiagnosticCanvasRenderer()
-    renderer.attach(canvas)
-    renderer.handle({ type: 'START_STROKE', point: { x: 0.5, y: 0.5 } })
-    renderer.handle({ type: 'APPEND_POINT', point: { x: 0.49, y: 0.5 } })
-
-    expect(context.stroke).not.toHaveBeenCalled()
+  it('discards a Stroke with fewer than two accepted points', () => {
+    const { renderer } = createRenderer()
+    renderer.handleGesture({ type: 'START_STROKE', point: { x: 0.5, y: 0.5 }, timestamp: 10 })
+    renderer.handleGesture({ type: 'APPEND_POINT', point: { x: 0.49, y: 0.5 }, timestamp: 20 })
+    expect(renderer.finishStroke()).toBeNull()
   })
 
-  it('keeps drawing when a valid tracked point moves quickly', () => {
-    const context = {
-      setTransform: vi.fn(),
-      clearRect: vi.fn(),
-      beginPath: vi.fn(),
-      moveTo: vi.fn(),
-      lineTo: vi.fn(),
-      quadraticCurveTo: vi.fn(),
-      stroke: vi.fn(),
-      strokeStyle: '',
-      lineWidth: 0,
-      lineCap: 'butt',
-      lineJoin: 'miter',
-    } as unknown as CanvasRenderingContext2D
-    const canvas = document.createElement('canvas')
-    Object.defineProperty(canvas, 'clientWidth', { value: 100 })
-    Object.defineProperty(canvas, 'clientHeight', { value: 100 })
-    vi.spyOn(canvas, 'getContext').mockReturnValue(context)
+  it('keeps the brush snapshot when settings change during a Stroke', () => {
+    const { renderer } = createRenderer()
+    renderer.setBrush({ color: '#AA0000', width: 8, style: 'ink' })
+    renderer.startMouseStroke({ x: 10, y: 10 }, 10)
+    renderer.setBrush({ color: '#0000AA', width: 2, style: 'ink' })
+    renderer.appendMousePoint({ x: 20, y: 20 }, 20)
 
-    const renderer = new DiagnosticCanvasRenderer()
-    renderer.attach(canvas)
-    renderer.handle({ type: 'START_STROKE', point: { x: 0.8, y: 0.2 } })
-    renderer.handle({ type: 'APPEND_POINT', point: { x: 0.1, y: 0.9 } })
-
-    const [moveX, moveY] = vi.mocked(context.moveTo).mock.calls[0]
-    expect(moveX).toBeCloseTo(20)
-    expect(moveY).toBeCloseTo(20)
-    expect(context.stroke).toHaveBeenCalledTimes(1)
+    expect(renderer.finishStroke()).toMatchObject({ color: '#AA0000', width: 8 })
   })
 
-  it('uses midpoint quadratic curves after the first accepted segment', () => {
-    const context = {
-      setTransform: vi.fn(),
-      clearRect: vi.fn(),
-      beginPath: vi.fn(),
-      moveTo: vi.fn(),
-      lineTo: vi.fn(),
-      quadraticCurveTo: vi.fn(),
-      stroke: vi.fn(),
-      strokeStyle: '',
-      lineWidth: 0,
-      lineCap: 'butt',
-      lineJoin: 'miter',
-    } as unknown as CanvasRenderingContext2D
-    const canvas = document.createElement('canvas')
-    Object.defineProperty(canvas, 'clientWidth', { value: 100 })
-    Object.defineProperty(canvas, 'clientHeight', { value: 100 })
-    vi.spyOn(canvas, 'getContext').mockReturnValue(context)
+  it('redraws completed strokes without changing their points', () => {
+    const { renderer, context } = createRenderer()
+    const points = [{ x: 5, y: 5, t: 1 }, { x: 15, y: 15, t: 2 }]
+    renderer.setCompletedStrokes([{
+      id: 'stroke-1',
+      points,
+      color: '#172B3A',
+      width: 4,
+      style: 'ink',
+      createdAt: 1,
+    }])
 
-    const renderer = new DiagnosticCanvasRenderer()
-    renderer.attach(canvas)
-    renderer.handle({ type: 'START_STROKE', point: { x: 0.8, y: 0.2 } })
-    renderer.handle({ type: 'APPEND_POINT', point: { x: 0.7, y: 0.3 } })
-    renderer.handle({ type: 'APPEND_POINT', point: { x: 0.6, y: 0.4 } })
-
-    expect(context.quadraticCurveTo).toHaveBeenCalledTimes(1)
-    expect(context.quadraticCurveTo).toHaveBeenCalledWith(25, 25, 28.75, 28.75)
+    expect(context.lineTo).toHaveBeenCalledWith(15, 15)
+    expect(points).toEqual([{ x: 5, y: 5, t: 1 }, { x: 15, y: 15, t: 2 }])
   })
 })
