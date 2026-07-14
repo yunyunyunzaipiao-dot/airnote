@@ -90,6 +90,27 @@ describe('AirNote M1 workspace', () => {
     expect(screen.getByText('1 STROKES')).toBeInTheDocument()
   })
 
+  it('suggests one group after 1.2 seconds and only creates a card after confirmation', () => {
+    vi.useFakeTimers()
+    try {
+      render(<App />)
+      drawMouseStroke()
+      act(() => vi.advanceTimersByTime(1199))
+      expect(screen.queryByRole('button', { name: '生成想法卡片' })).not.toBeInTheDocument()
+      act(() => vi.advanceTimersByTime(1))
+      fireEvent.click(screen.getByRole('button', { name: '生成想法卡片' }))
+      expect(screen.getByText('未命名想法')).toBeInTheDocument()
+      expect(screen.getByText('1 CARDS / 0 EDGES')).toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: /连接点创建连接/ })).toHaveLength(4)
+      expect(screen.getByRole('button', { name: '调整卡片 未命名想法 大小' })).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: '撤销' }))
+      expect(screen.queryByText('未命名想法')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: '生成想法卡片' })).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('forces mouse fallback on refresh even if gesture mode was previously stored', () => {
     localStorage.setItem('airnote.settings.current', JSON.stringify({
       ...DEFAULT_SETTINGS,

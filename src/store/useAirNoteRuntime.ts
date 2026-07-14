@@ -26,13 +26,34 @@ import {
 import { createHandTracker, type HandTracker } from '../handTracking/handTracker'
 import { startVideoFrameLoop, type VideoFrameLoop } from '../handTracking/videoFrameLoop'
 import { loadSettings, saveSettings } from '../persistence/settingsStorage'
+import { loadWorkspace, saveWorkspace, type SaveStatus } from '../persistence/workspaceStorage'
+import {
+  addStrokeToCurrentGroup,
+  cancelCurrentGroup,
+  continueCurrentGroup,
+  createCardFromCurrentGroup,
+  createEdge,
+  createWorkspaceDocument,
+  deleteCard,
+  moveCard,
+  projectFromDocument,
+  renameCard,
+  resizeCard,
+  suggestCurrentGroup,
+  touch,
+  updateEdgeType,
+} from './workspaceDocument'
 import type { CameraErrorCode, M0UiState, NormalizedPoint, RuntimeDiagnostics } from '../types/m0'
 import {
   DEFAULT_SETTINGS,
   type AirNoteSettings,
   type BrushSettings,
+  type Edge,
+  type EdgeAnchor,
   type InputMode,
   type Stroke,
+  type WorkspaceDocument,
+  type WorkspaceTool,
 } from '../types/workspace'
 
 export type CalibrationPhase = 'idle' | 'required' | 'roi' | 'pinch' | 'review' | 'ready'
@@ -72,17 +93,30 @@ function readyCalibration(settings: AirNoteSettings): CalibrationUiState {
 }
 
 export function useAirNoteRuntime() {
+  const restoredRef = useRef<ReturnType<typeof loadWorkspace> | undefined>(undefined)
+  const restoreErrorRef = useRef<string | null>(null)
+  if (restoredRef.current === undefined) {
+    try {
+      restoredRef.current = loadWorkspace()
+    } catch (error) {
+      restoredRef.current = null
+      restoreErrorRef.current = error instanceof Error ? error.message : '上次项目无法恢复。'
+    }
+  }
   const initialSettingsRef = useRef<AirNoteSettings | null>(null)
   if (!initialSettingsRef.current) {
-    initialSettingsRef.current = { ...loadSettings(), inputMode: 'mouse' }
+    initialSettingsRef.current = restoredRef.current?.settings ?? { ...loadSettings(), inputMode: 'mouse' }
   }
 
   const [uiState, setUiState] = useState<M0UiState>(INITIAL_UI_STATE)
   const [settings, setSettings] = useState<AirNoteSettings>(initialSettingsRef.current)
-  const [strokes, setStrokes] = useState<Stroke[]>([])
+  const [documentState, setDocumentState] = useState<WorkspaceDocument>(() => restoredRef.current?.document ?? createWorkspaceDocument())
   const [history, setHistory] = useState<WorkspaceHistoryState>(() => createWorkspaceHistory())
   const [calibration, setCalibration] = useState<CalibrationUiState>(() => readyCalibration(initialSettingsRef.current!))
-  const [workspaceMessage, setWorkspaceMessage] = useState<string | null>(null)
+  const [workspaceMessage, setWorkspaceMessage] = useState<string | null>(restoreErrorRef.current)
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const [tool, setToolState] = useState<WorkspaceTool>('draw')
+  const [edgeType, setEdgeType] = useState<Edge['type']>('undirected')
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -91,7 +125,7 @@ export function useAirNoteRuntime() {
   const rendererRef = useRef(new StrokeCanvasRenderer())
   const machineRef = useRef(createGestureMachine())
   const settingsRef = useRef(settings)
-  const strokesRef = useRef(strokes)
+  const documentRef = useRef(documentState)
   const historyRef = useRef(history)
   const calibrationRef = useRef(calibration)
   const calibrationDraftRef = useRef<CalibrationDraft>(createCalibrationDraft())
@@ -101,6 +135,8 @@ export function useAirNoteRuntime() {
   const frameCountRef = useRef(0)
   const fpsWindowStartedAtRef = useRef(0)
   const lastHudUpdateAtRef = useRef(0)
+  const groupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hydratedRef = useRef(false)
 
   const publishCalibration = useCallback((next: CalibrationUiState) => {
     calibrationRef.current = next
@@ -122,10 +158,10 @@ export function useAirNoteRuntime() {
     }
   }, [])
 
-  const applyStrokes = useCallback((next: Stroke[]) => {
-    strokesRef.current = next
-    rendererRef.current.setCompletedStrokes(next)
-    setStrokes(next)
+  const applyDocument = useCallback((next: WorkspaceDocument) => {
+    documentRef.current = next
+    rendererRef.current.setCompletedStrokes(next.strokes.filter((stroke) => !stroke.cardId))
+    setDocumentState(next)
   }, [])
 
   const publishHistory = useCallback((next: WorkspaceHistoryState) => {
@@ -135,11 +171,13 @@ export function useAirNoteRuntime() {
 
   const commitStroke = useCallback((stroke: Stroke | null) => {
     if (!stroke) return
-    const before = strokesRef.current
-    const after = [...before, stroke]
-    applyStrokes(after)
+    const before = documentRef.current
+    const after = addStrokeToCurrentGroup(before, stroke)
+    applyDocument(after)
     publishHistory(pushHistory(historyRef.current, { type: 'ADD_STROKE', before, after }))
-  }, [applyStrokes, publishHistory])
+    if (groupTimerRef.current) clearTimeout(groupTimerRef.current)
+    groupTimerRef.current = setTimeout(() => applyDocument(suggestCurrentGroup(documentRef.current)), 1200)
+  }, [applyDocument, publishHistory])
 
   const finishRendererStroke = useCallback(() => {
     commitStroke(rendererRef.current.finishStroke())
@@ -381,18 +419,18 @@ export function useAirNoteRuntime() {
     rendererRef.current.attachCursor(cursor)
     rendererRef.current.setBrush(settingsRef.current.brush)
     rendererRef.current.setWritingROI(settingsRef.current.gesture.writingROI)
-    rendererRef.current.setCompletedStrokes(strokesRef.current)
+    rendererRef.current.setCompletedStrokes(documentRef.current.strokes.filter((stroke) => !stroke.cardId))
   }, [finishRendererStroke])
 
   const startMouseStroke = useCallback((point: { x: number; y: number }, timestamp: number) => {
-    if (settingsRef.current.inputMode !== 'mouse') return
+    if (settingsRef.current.inputMode !== 'mouse' || tool !== 'draw') return
     rendererRef.current.startMouseStroke(point, timestamp)
-  }, [])
+  }, [tool])
 
   const appendMousePoint = useCallback((point: { x: number; y: number }, timestamp: number) => {
-    if (settingsRef.current.inputMode !== 'mouse') return
+    if (settingsRef.current.inputMode !== 'mouse' || tool !== 'draw') return
     rendererRef.current.appendMousePoint(point, timestamp)
-  }, [])
+  }, [tool])
 
   const endMouseStroke = useCallback(() => {
     if (settingsRef.current.inputMode !== 'mouse') return
@@ -408,31 +446,31 @@ export function useAirNoteRuntime() {
     finishRendererStroke()
     const result = undoHistory(historyRef.current)
     if (!result) return
-    applyStrokes(result.strokes)
+    applyDocument(result.document)
     publishHistory(result.history)
     setWorkspaceMessage(null)
-  }, [applyStrokes, endGestureTrajectory, finishRendererStroke, publishHistory])
+  }, [applyDocument, endGestureTrajectory, finishRendererStroke, publishHistory])
 
   const redo = useCallback(() => {
     endGestureTrajectory()
     finishRendererStroke()
     const result = redoHistory(historyRef.current)
     if (!result) return
-    applyStrokes(result.strokes)
+    applyDocument(result.document)
     publishHistory(result.history)
     setWorkspaceMessage(null)
-  }, [applyStrokes, endGestureTrajectory, finishRendererStroke, publishHistory])
+  }, [applyDocument, endGestureTrajectory, finishRendererStroke, publishHistory])
 
   const clearWorkspace = useCallback(() => {
     endGestureTrajectory()
     finishRendererStroke()
-    const before = strokesRef.current
-    if (before.length === 0) return
-    const after: Stroke[] = []
-    applyStrokes(after)
+    const before = documentRef.current
+    if (before.strokes.length === 0 && before.cards.length === 0 && before.edges.length === 0) return
+    const after = touch({ ...before, strokes: [], groups: [], cards: [], edges: [] })
+    applyDocument(after)
     publishHistory(pushHistory(historyRef.current, { type: 'CLEAR_WORKSPACE', before, after }))
     setWorkspaceMessage('画布已清空，可撤销。')
-  }, [applyStrokes, endGestureTrajectory, finishRendererStroke, publishHistory])
+  }, [applyDocument, endGestureTrajectory, finishRendererStroke, publishHistory])
 
   const beginCalibration = useCallback(() => {
     endGestureTrajectory()
@@ -522,7 +560,7 @@ export function useAirNoteRuntime() {
 
   const confirmCalibration = useCallback(() => {
     rendererRef.current.finishStroke()
-    rendererRef.current.setCompletedStrokes(strokesRef.current)
+    rendererRef.current.setCompletedStrokes(documentRef.current.strokes.filter((stroke) => !stroke.cardId))
     machineRef.current = createGestureMachine()
     publishCalibration({
       phase: 'ready',
@@ -565,6 +603,105 @@ export function useAirNoteRuntime() {
     setWorkspaceMessage('请先完成当前校准，或选择直接使用默认参数。')
   }, [beginCalibration, setInputMode, uiState.cameraStatus])
 
+  const setTool = useCallback((nextTool: WorkspaceTool) => {
+    finishRendererStroke()
+    setToolState(nextTool)
+  }, [finishRendererStroke])
+
+  const continueGroup = useCallback(() => applyDocument(continueCurrentGroup(documentRef.current)), [applyDocument])
+
+  const cancelGroup = useCallback(() => {
+    if (groupTimerRef.current) clearTimeout(groupTimerRef.current)
+    applyDocument(cancelCurrentGroup(documentRef.current))
+  }, [applyDocument])
+
+  const generateCard = useCallback(() => {
+    const before = documentRef.current
+    const after = createCardFromCurrentGroup(before)
+    if (!after) {
+      setWorkspaceMessage('无法生成卡片，请撤销最近笔画后重试。')
+      return
+    }
+    applyDocument(after)
+    publishHistory(pushHistory(historyRef.current, { type: 'CREATE_CARD', before, after }))
+    setToolState('select')
+  }, [applyDocument, publishHistory])
+
+  const commitCardMove = useCallback((cardId: string, x: number, y: number, stage: { width: number; height: number }) => {
+    const before = documentRef.current
+    const after = moveCard(before, cardId, x, y, stage)
+    const oldCard = before.cards.find((card) => card.id === cardId)
+    const newCard = after.cards.find((card) => card.id === cardId)
+    if (!oldCard || !newCard || (oldCard.position.x === newCard.position.x && oldCard.position.y === newCard.position.y)) return
+    applyDocument(after)
+    publishHistory(pushHistory(historyRef.current, { type: 'MOVE_CARD', before, after }))
+  }, [applyDocument, publishHistory])
+
+  const commitCardResize = useCallback((cardId: string, width: number, height: number, stage: { width: number; height: number }) => {
+    const before = documentRef.current
+    const after = resizeCard(before, cardId, width, height, stage)
+    const oldCard = before.cards.find((card) => card.id === cardId)
+    const newCard = after.cards.find((card) => card.id === cardId)
+    if (!oldCard || !newCard || (oldCard.size.width === newCard.size.width && oldCard.size.height === newCard.size.height)) return
+    applyDocument(after)
+    publishHistory(pushHistory(historyRef.current, { type: 'RESIZE_CARD', before, after }))
+  }, [applyDocument, publishHistory])
+
+  const commitCardRename = useCallback((cardId: string, title: string) => {
+    const before = documentRef.current
+    const after = renameCard(before, cardId, title)
+    applyDocument(after)
+    publishHistory(pushHistory(historyRef.current, { type: 'RENAME_CARD', before, after }))
+  }, [applyDocument, publishHistory])
+
+  const commitCardDelete = useCallback((cardId: string) => {
+    const before = documentRef.current
+    const edgeCount = before.edges.filter((edge) => edge.sourceCardId === cardId || edge.targetCardId === cardId).length
+    if (edgeCount > 0 && !window.confirm(`删除卡片将同时删除${edgeCount}条连接线。`)) return
+    const after = deleteCard(before, cardId)
+    applyDocument(after)
+    publishHistory(pushHistory(historyRef.current, { type: 'DELETE_CARD', before, after }))
+  }, [applyDocument, publishHistory])
+
+  const commitEdge = useCallback((sourceCardId: string, targetCardId: string, sourceAnchor: EdgeAnchor, targetAnchor: EdgeAnchor) => {
+    const before = documentRef.current
+    const after = createEdge(before, sourceCardId, targetCardId, edgeType, sourceAnchor, targetAnchor)
+    if (!after) return false
+    applyDocument(after)
+    publishHistory(pushHistory(historyRef.current, { type: 'CREATE_EDGE', before, after }))
+    return true
+  }, [applyDocument, edgeType, publishHistory])
+
+  const commitEdgeType = useCallback((edgeId: string, type: Edge['type']) => {
+    const before = documentRef.current
+    const after = updateEdgeType(before, edgeId, type)
+    if (after === before) return
+    applyDocument(after)
+    publishHistory(pushHistory(historyRef.current, { type: 'UPDATE_EDGE', before, after }))
+  }, [applyDocument, publishHistory])
+
+  useEffect(() => {
+    if (!hydratedRef.current) {
+      hydratedRef.current = true
+      rendererRef.current.setCompletedStrokes(documentState.strokes.filter((stroke) => !stroke.cardId))
+      return
+    }
+    setSaveStatus('saving')
+    const timer = setTimeout(() => {
+      try {
+        saveWorkspace(projectFromDocument(documentRef.current, settingsRef.current))
+        setSaveStatus('saved')
+      } catch (error) {
+        setSaveStatus('error')
+        const isQuota = error instanceof DOMException && error.name === 'QuotaExceededError'
+        setWorkspaceMessage(isQuota
+          ? '本地存储空间不足，请导出项目后清理画布。'
+          : error instanceof Error ? error.message : '本地保存失败。')
+      }
+    }, 800)
+    return () => clearTimeout(timer)
+  }, [documentState, settings])
+
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) stopLoop()
@@ -599,6 +736,7 @@ export function useAirNoteRuntime() {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      if (groupTimerRef.current) clearTimeout(groupTimerRef.current)
       stopRuntime(false)
     }
   }, [stopRuntime])
@@ -606,7 +744,12 @@ export function useAirNoteRuntime() {
   return {
     uiState,
     settings,
-    strokes,
+    document: documentState,
+    strokes: documentState.strokes,
+    currentGroup: documentState.groups.find((group) => group.status !== 'committed') ?? null,
+    tool,
+    edgeType,
+    saveStatus,
     calibration,
     workspaceMessage,
     canUndo: history.undoStack.length > 0,
@@ -628,5 +771,16 @@ export function useAirNoteRuntime() {
     captureCalibrationSample,
     confirmCalibration,
     skipCalibration,
+    setTool,
+    setEdgeType,
+    continueGroup,
+    cancelGroup,
+    generateCard,
+    commitCardMove,
+    commitCardResize,
+    commitCardRename,
+    commitCardDelete,
+    commitEdge,
+    commitEdgeType,
   }
 }

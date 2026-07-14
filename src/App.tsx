@@ -29,21 +29,37 @@ export function App() {
         inputMode={runtime.settings.inputMode}
         canUndo={runtime.canUndo}
         canRedo={runtime.canRedo}
-        hasContent={runtime.strokes.length > 0}
+        hasContent={runtime.strokes.length > 0 || runtime.document.cards.length > 0}
+        saveStatus={runtime.saveStatus}
         onUndo={runtime.undo}
         onRedo={runtime.redo}
         onClear={confirmClear}
       />
       <div className="workspace-layout">
-        <LeftToolbar />
+        <LeftToolbar tool={runtime.tool} onChange={runtime.setTool} />
         <WorkspaceCanvas
           inputMode={runtime.settings.inputMode}
-          strokeCount={runtime.strokes.length}
+          tool={runtime.tool}
+          edgeType={runtime.edgeType}
+          strokes={runtime.strokes}
+          cards={runtime.document.cards}
+          edges={runtime.document.edges}
+          currentGroup={runtime.currentGroup}
           calibration={runtime.calibration}
           onReady={runtime.attachCanvas}
           onPointerStart={runtime.startMouseStroke}
           onPointerMove={runtime.appendMousePoint}
           onPointerEnd={runtime.endMouseStroke}
+          onGenerateCard={runtime.generateCard}
+          onContinueGroup={runtime.continueGroup}
+          onCancelGroup={runtime.cancelGroup}
+          onMoveCard={runtime.commitCardMove}
+          onResizeCard={runtime.commitCardResize}
+          onRenameCard={runtime.commitCardRename}
+          onDeleteCard={runtime.commitCardDelete}
+          onCreateEdge={runtime.commitEdge}
+          onUpdateEdge={runtime.commitEdgeType}
+          onEdgeTypeChange={runtime.setEdgeType}
         />
         <aside className="context-rail" aria-label="摄像头、手势与属性面板">
           <CameraPreview
