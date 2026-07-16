@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { cardInkMetrics } from '../drawing/cardInk'
 import { automaticEdgeAnchors, cardAnchorPoint, closestCardAnchor, MIN_CARD_SIZE } from '../store/workspaceDocument'
 import type { CalibrationUiState } from '../store/useAirNoteRuntime'
 import type { Edge, EdgeAnchor, IdeaCard, InputMode, Stroke, StrokeGroup, WorkspaceTool } from '../types/workspace'
@@ -31,19 +32,6 @@ interface WorkspaceCanvasProps {
 function canvasPoint(event: PointerEvent<HTMLCanvasElement>) {
   const bounds = event.currentTarget.getBoundingClientRect()
   return { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
-}
-
-function cardInkMetrics(strokes: Stroke[]) {
-  const points = strokes.flatMap((stroke) => stroke.points)
-  const minX = Math.min(...points.map((point) => point.x))
-  const minY = Math.min(...points.map((point) => point.y))
-  const maxX = Math.max(...points.map((point) => point.x))
-  const maxY = Math.max(...points.map((point) => point.y))
-  const padding = Math.max(24, Math.min(Math.max(1, maxX - minX), Math.max(1, maxY - minY)) * 0.1)
-  return {
-    origin: { x: minX - padding, y: minY - padding - 38 },
-    size: { width: maxX - minX + padding * 2, height: maxY - minY + padding * 2 + 38 },
-  }
 }
 
 export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
@@ -203,9 +191,11 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
               {editingCardId === card.id ? <input autoFocus aria-label="卡片标题" maxLength={100} value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} onBlur={() => finishTitle(card.id, true)} onKeyDown={(event) => { if (event.key === 'Enter') finishTitle(card.id, true); if (event.key === 'Escape') finishTitle(card.id, false) }} /> : <strong>{card.title}</strong>}
               <span>{editingCardId === card.id ? `${draftTitle.length}/100` : '双击改名'}</span>
             </div>
-            <svg className="idea-card__ink" viewBox={`0 0 ${ink.size.width} ${ink.size.height}`} preserveAspectRatio="xMidYMid meet">
-              {cardStrokes.map((stroke) => <polyline key={stroke.id} points={stroke.points.map((point) => `${point.x - ink.origin.x},${point.y - ink.origin.y}`).join(' ')} fill="none" stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" />)}
-            </svg>
+            {ink ? (
+              <svg className="idea-card__ink" viewBox={`0 0 ${ink.size.width} ${ink.size.height}`} preserveAspectRatio="xMidYMid meet">
+                {cardStrokes.map((stroke) => <polyline key={stroke.id} points={stroke.points.map((point) => `${point.x - ink.origin.x},${point.y - ink.origin.y}`).join(' ')} fill="none" stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" />)}
+              </svg>
+            ) : null}
             <button className="idea-card__delete" type="button" aria-label={`删除卡片 ${card.title}`} onClick={() => props.onDeleteCard(card.id)}>×</button>
             {(['top', 'right', 'bottom', 'left'] as EdgeAnchor[]).map((anchor) => (
               <button

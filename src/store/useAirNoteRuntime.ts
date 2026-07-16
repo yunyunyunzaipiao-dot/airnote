@@ -46,6 +46,7 @@ import {
 import type { CameraErrorCode, M0UiState, NormalizedPoint, RuntimeDiagnostics } from '../types/m0'
 import {
   DEFAULT_SETTINGS,
+  type AirNoteProject,
   type AirNoteSettings,
   type BrushSettings,
   type Edge,
@@ -680,6 +681,46 @@ export function useAirNoteRuntime() {
     publishHistory(pushHistory(historyRef.current, { type: 'UPDATE_EDGE', before, after }))
   }, [applyDocument, publishHistory])
 
+  const createProjectSnapshot = useCallback(() => {
+    endGestureTrajectory()
+    finishRendererStroke()
+    return projectFromDocument(documentRef.current, settingsRef.current)
+  }, [endGestureTrajectory, finishRendererStroke])
+
+  const replaceProject = useCallback((project: AirNoteProject) => {
+    endGestureTrajectory()
+    finishRendererStroke()
+    if (groupTimerRef.current) {
+      clearTimeout(groupTimerRef.current)
+      groupTimerRef.current = null
+    }
+    const { schemaVersion: _schemaVersion, settings: importedSettings, ...document } = project
+    const safeSettings = { ...importedSettings, inputMode: 'mouse' as const }
+    machineRef.current = createGestureMachine()
+    applyDocument(document)
+    publishSettings(safeSettings)
+    publishCalibration(readyCalibration(safeSettings))
+    publishHistory(createWorkspaceHistory())
+    setToolState('draw')
+    setEdgeType('undirected')
+    setSaveStatus('saving')
+    try {
+      saveWorkspace(projectFromDocument(document, safeSettings))
+      setSaveStatus('saved')
+      setWorkspaceMessage('项目已导入并保存到本地。')
+    } catch (error) {
+      setSaveStatus('error')
+      const isQuota = error instanceof DOMException && error.name === 'QuotaExceededError'
+      setWorkspaceMessage(isQuota
+        ? '项目已导入，但本地存储空间不足，请立即导出项目备份。'
+        : '项目已导入，但本地保存失败，请立即导出项目备份。')
+    }
+  }, [applyDocument, endGestureTrajectory, finishRendererStroke, publishCalibration, publishHistory, publishSettings])
+
+  const reportWorkspaceMessage = useCallback((message: string | null) => {
+    setWorkspaceMessage(message)
+  }, [])
+
   useEffect(() => {
     if (!hydratedRef.current) {
       hydratedRef.current = true
@@ -782,5 +823,8 @@ export function useAirNoteRuntime() {
     commitCardDelete,
     commitEdge,
     commitEdgeType,
+    createProjectSnapshot,
+    replaceProject,
+    reportWorkspaceMessage,
   }
 }

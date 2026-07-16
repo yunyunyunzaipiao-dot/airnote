@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
 import { createHandTracker } from '../handTracking/handTracker'
 import { startVideoFrameLoop } from '../handTracking/videoFrameLoop'
+import { projectFromDocument } from '../store/workspaceDocument'
 import { DEFAULT_SETTINGS } from '../types/workspace'
 import type { HandFrame, NormalizedPoint } from '../types/m0'
 
@@ -149,6 +150,43 @@ describe('AirNote M1 workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: '撤销' }))
     expect(screen.getByText('1 STROKES')).toBeInTheDocument()
     expect(confirm).toHaveBeenCalledWith('将清空当前画布中的笔迹、卡片和连接线。此操作可撤销一次。')
+  })
+
+  it('keeps the current canvas for invalid or cancelled imports and replaces only after confirmation', async () => {
+    render(<App />)
+    drawMouseStroke()
+    const fileInput = screen.getByLabelText('选择项目JSON')
+    const invalidFile = new File(['{broken'], 'broken.json', { type: 'application/json' })
+    Object.defineProperty(invalidFile, 'text', { value: vi.fn().mockResolvedValue('{broken') })
+    fireEvent.change(fileInput, { target: { files: [invalidFile] } })
+    expect(await screen.findByRole('status')).toHaveTextContent('项目文件格式不正确，当前画布未被修改。')
+    expect(screen.getByText('1 STROKES')).toBeInTheDocument()
+
+    const importedDocument = {
+      workspace: { id: 'import-workspace', name: '导入项目', createdAt: 0, updatedAt: 0, viewport: { x: 0, y: 0, zoom: 1 } },
+      strokes: [
+        { id: 'import-1', points: [{ x: 0, y: 0, t: 0 }, { x: 10, y: 10, t: 16 }], color: '#172B3A', width: 4 as const, style: 'ink' as const, createdAt: 0 },
+        { id: 'import-2', points: [{ x: 20, y: 20, t: 0 }, { x: 30, y: 30, t: 16 }], color: '#172B3A', width: 4 as const, style: 'ink' as const, createdAt: 1 },
+      ],
+      groups: [],
+      cards: [],
+      edges: [],
+    }
+    const json = JSON.stringify(projectFromDocument(importedDocument, { ...DEFAULT_SETTINGS, inputMode: 'gesture' }))
+    const projectFile = new File([json], 'airnote.json', { type: 'application/json' })
+    Object.defineProperty(projectFile, 'text', { value: vi.fn().mockResolvedValue(json) })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+
+    fireEvent.change(fileInput, { target: { files: [projectFile] } })
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
+    expect(screen.getByText('1 STROKES')).toBeInTheDocument()
+
+    fireEvent.change(fileInput, { target: { files: [projectFile] } })
+    await waitFor(() => expect(screen.getByText('2 STROKES')).toBeInTheDocument())
+    expect(screen.getByRole('status')).toHaveTextContent('项目已导入并保存到本地。')
+    expect(JSON.parse(localStorage.getItem('airnote.workspace.current')!).strokes).toHaveLength(2)
+    expect(JSON.parse(localStorage.getItem('airnote.workspace.current')!).settings.inputMode).toBe('mouse')
+    expect(confirm).toHaveBeenCalledWith('导入项目将替换当前画布。是否继续？')
   })
 
   it('updates and persists the three-level brush width', () => {

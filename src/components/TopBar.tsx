@@ -1,4 +1,4 @@
-import { DisabledAction } from './DisabledAction'
+import { useRef, type ChangeEvent } from 'react'
 import type { CameraStatus } from '../types/m0'
 import type { InputMode } from '../types/workspace'
 import type { SaveStatus } from '../persistence/workspaceStorage'
@@ -13,6 +13,9 @@ interface TopBarProps {
   onUndo: () => void
   onRedo: () => void
   onClear: () => void
+  onExportPng: () => void
+  onExportProject: () => void
+  onImportProject: (file: File) => void
 }
 
 export function TopBar({
@@ -25,14 +28,23 @@ export function TopBar({
   onUndo,
   onRedo,
   onClear,
+  onExportPng,
+  onExportProject,
+  onImportProject,
 }: TopBarProps) {
   const cameraActive = cameraStatus === 'running'
+  const importInputRef = useRef<HTMLInputElement>(null)
+  const handleImportFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (file) onImportProject(file)
+  }
   return (
     <header className="top-bar">
       <div className="brand-lockup">
         <span className="brand-mark" aria-hidden="true">空</span>
         <div>
-          <p className="eyebrow">AIRNOTE · M2 IDEA WORKSPACE</p>
+          <p className="eyebrow">AIRNOTE · M3 PORTABLE WORKSPACE</p>
           <h1>空书 <span>/ AirNote</span></h1>
         </div>
       </div>
@@ -52,7 +64,17 @@ export function TopBar({
           <strong>重做</strong><span>Ctrl/Cmd+Shift+Z</span>
         </button>
         <button type="button" className="danger-action" onClick={onClear} disabled={!hasContent}>清空</button>
-        <DisabledAction label="导出（暂未实现）" compact />
+        <button type="button" className="project-action" onClick={onExportPng}>导出图片</button>
+        <button type="button" className="project-action" onClick={onExportProject}>导出项目</button>
+        <button type="button" className="project-action" onClick={() => importInputRef.current?.click()}>导入项目</button>
+        <input
+          ref={importInputRef}
+          className="visually-hidden"
+          type="file"
+          accept=".json,application/json"
+          aria-label="选择项目JSON"
+          onChange={handleImportFile}
+        />
       </nav>
     </header>
   )

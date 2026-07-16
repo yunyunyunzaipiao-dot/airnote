@@ -1,6 +1,6 @@
 # AirNote / 空书
 
-AirNote 是使用 React、TypeScript 和 Vite 构建的桌面网页工具。当前成立版本为 M2 P0 想法工作区 `0.3.0-m2.1`。
+AirNote 是使用 React、TypeScript 和 Vite 构建的桌面网页工具。当前成立版本为 M2 P0 想法工作区 `0.3.0-m2.1`；当前工作区正在开发 M3 的 `SAVE-02` 本地导入导出能力，尚未成立新版本。
 
 M2 当前链路为：摄像头或鼠标输入 → 正式 Stroke → 笔画分组 → 用户确认生成卡片 → 卡片整理与连接 → 本地自动保存和刷新恢复。
 
@@ -16,6 +16,21 @@ M2 当前链路为：摄像头或鼠标输入 → 正式 Stroke → 笔画分组
 npm install
 ```
 
+## 换机恢复
+
+```bash
+git clone https://github.com/yunyunyunzaipiao-dot/airnote.git
+cd airnote
+npm ci
+npm run typecheck
+npm test
+npm run build
+```
+
+使用 Node.js 24.x 和 npm 11.x；依赖版本由 `package-lock.json` 锁定。MediaPipe WASM 与手部模型已保存在 `public/mediapipe/`，核心功能不需要额外下载模型，也不需要项目级环境变量。
+
+GitHub 只保存源码、产品文档、测试、非敏感工程配置和本地模型资产。`node_modules/`、`dist/`、日志、临时文件与 `.env*` 不进入仓库；浏览器中的工作区和校准设置也不会自动跨电脑同步，需要在旧电脑使用“导出项目”，再在新电脑使用“导入项目”。Git 用户名、邮箱和 GitHub 登录凭据属于电脑级配置，需要在新电脑单独设置或登录。
+
 ## 本地启动
 
 ```bash
@@ -25,6 +40,8 @@ npm run dev
 Vite 默认地址为 `http://localhost:5173/`。如果端口被占用，以终端显示的实际地址为准。
 
 页面加载不会请求摄像头权限。用户可直接使用鼠标绘图，或主动点击“启用摄像头”后完成/跳过校准并使用捏合手势绘图。
+
+顶部栏提供“导出图片”“导出项目”和“导入项目”：PNG 只包含画布笔迹、卡片与连接；项目 JSON 可再次导入编辑。导入文件会先完成格式、版本和引用校验，只有用户确认后才替换当前画布。
 
 ## 工程检查
 
@@ -41,7 +58,7 @@ npm run build
 
 只有负责人明确批准版本成立后，才更新版本号、Changelog 和版本说明；Git 提交、标签与推送仍需明确授权。
 
-## M2 成立范围
+## 当前实现范围
 
 已实现：
 
@@ -59,11 +76,11 @@ npm run build
 - `CARD-02` 卡片移动、改名、删除和可撤销尺寸调整
 - `EDGE-01` 上下左右四向锚点、无向/有向连接及实时端点更新
 - `SAVE-01` 800ms 防抖本地保存、校验恢复和损坏副本保留
+- `SAVE-02` 画布内容 PNG 导出、项目 JSON 导出、全量校验后确认导入与立即本地保存（M3 开发中，尚未成立版本）
 - Stroke、Group、Card、Edge 和清空操作的完整工作区撤销/重做
 
 未实现：
 
-- PNG 和项目 JSON 导入导出
 - OCR、后端、账号、云同步
 - Glow、Particle、手势模式 2 和键盘自由文字
 

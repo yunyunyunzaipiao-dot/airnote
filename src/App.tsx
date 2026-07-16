@@ -5,6 +5,8 @@ import { LeftToolbar } from './components/LeftToolbar'
 import { PropertyPanel } from './components/PropertyPanel'
 import { TopBar } from './components/TopBar'
 import { WorkspaceCanvas } from './components/WorkspaceCanvas'
+import { exportProjectPng } from './export/pngExport'
+import { exportProjectJson, readProjectFile } from './export/projectTransfer'
 import { useAirNoteRuntime } from './store/useAirNoteRuntime'
 
 export function App() {
@@ -14,6 +16,34 @@ export function App() {
   const confirmClear = () => {
     const confirmed = window.confirm('将清空当前画布中的笔迹、卡片和连接线。此操作可撤销一次。')
     if (confirmed) runtime.clearWorkspace()
+  }
+
+  const exportPng = async () => {
+    try {
+      await exportProjectPng(runtime.createProjectSnapshot())
+      runtime.reportWorkspaceMessage('画布图片已导出。')
+    } catch {
+      runtime.reportWorkspaceMessage('图片导出失败，请稍后重试。')
+    }
+  }
+
+  const exportProject = () => {
+    try {
+      exportProjectJson(runtime.createProjectSnapshot())
+      runtime.reportWorkspaceMessage('项目JSON已导出。')
+    } catch (error) {
+      runtime.reportWorkspaceMessage(error instanceof Error ? error.message : '项目导出失败，请稍后重试。')
+    }
+  }
+
+  const importProject = async (file: File) => {
+    const result = await readProjectFile(file)
+    if (!result.ok) {
+      runtime.reportWorkspaceMessage(result.message)
+      return
+    }
+    if (!window.confirm('导入项目将替换当前画布。是否继续？')) return
+    runtime.replaceProject(result.project)
   }
 
   return (
@@ -34,6 +64,9 @@ export function App() {
         onUndo={runtime.undo}
         onRedo={runtime.redo}
         onClear={confirmClear}
+        onExportPng={exportPng}
+        onExportProject={exportProject}
+        onImportProject={importProject}
       />
       <div className="workspace-layout">
         <LeftToolbar tool={runtime.tool} onChange={runtime.setTool} />
