@@ -81,6 +81,36 @@ describe('AirNote M1 workspace', () => {
     expect(getUserMedia).not.toHaveBeenCalled()
   })
 
+  it('opens Chinese themes from the 空 button and restores the local choice', () => {
+    localStorage.setItem('airnote.uiTheme', 'night')
+    const { unmount } = render(<App />)
+
+    expect(document.documentElement).toHaveAttribute('data-ui-theme', 'night')
+    const themeTrigger = screen.getByRole('button', { name: '打开界面主题' })
+    expect(themeTrigger).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(themeTrigger)
+    expect(themeTrigger).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('heading', { name: '选择主题' })).toBeInTheDocument()
+    expect(screen.getByText('明亮色')).toBeInTheDocument()
+    expect(screen.getByText('低饱和色')).toBeInTheDocument()
+    expect(screen.getByText('纯色')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /全黑界面/ })).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByRole('button', { name: /晴空蓝/ }))
+    expect(document.documentElement).toHaveAttribute('data-ui-theme', 'sky')
+    expect(localStorage.getItem('airnote.uiTheme')).toBe('sky')
+    expect(screen.getByRole('button', { name: /晴空蓝/ })).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('heading', { name: '选择主题' })).not.toBeInTheDocument()
+    expect(themeTrigger).toHaveFocus()
+
+    unmount()
+    render(<App />)
+    expect(document.documentElement).toHaveAttribute('data-ui-theme', 'sky')
+  })
+
   it('creates a mouse Stroke and supports undo and redo', () => {
     render(<App />)
     expect(screen.getByText('Ctrl/Cmd+Z')).toBeInTheDocument()

@@ -2,6 +2,7 @@ import { useRef, type ChangeEvent } from 'react'
 import type { CameraStatus } from '../types/m0'
 import type { InputMode } from '../types/workspace'
 import type { SaveStatus } from '../persistence/workspaceStorage'
+import { ThemeMenu } from './ThemeMenu'
 
 interface TopBarProps {
   cameraStatus: CameraStatus
@@ -42,7 +43,7 @@ export function TopBar({
   return (
     <header className="top-bar">
       <div className="brand-lockup">
-        <span className="brand-mark" aria-hidden="true">空</span>
+        <ThemeMenu />
         <div>
           <p className="eyebrow">AIRNOTE · P1 STYLE LAB</p>
           <h1>空书 <span>/ AirNote</span></h1>
