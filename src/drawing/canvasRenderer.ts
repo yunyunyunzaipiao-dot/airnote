@@ -5,15 +5,33 @@ import {
   type BrushSettings,
   type Stroke,
   type StrokePoint,
+  type VisualStyle,
   type WritingROI,
 } from '../types/workspace'
 import {
-  applyAxisAwareEma,
   isPointFarEnough,
   mapMirroredPoint,
+  stabilizeGesturePoint,
 } from './trajectory'
+import { particleSamplesForStroke } from './particleStyle'
 
 type InputSource = 'gesture' | 'mouse'
+export type StylePerformanceStage = 'full' | 'reduced-particles' | 'no-trail'
+
+export function nextStylePerformanceStage(stage: StylePerformanceStage, fps: number): StylePerformanceStage {
+  if (fps >= 24 || stage === 'no-trail') return stage
+  return stage === 'full' ? 'reduced-particles' : 'no-trail'
+}
+
+interface RuntimeParticle {
+  x: number
+  y: number
+  color: string
+  size: number
+  createdAt: number
+  lifetime: number
+  blur: number
+}
 
 function createStrokeId() {
   return globalThis.crypto?.randomUUID?.()
@@ -33,12 +51,20 @@ export class StrokeCanvasRenderer {
   private writingROI: WritingROI = DEFAULT_WRITING_ROI
   private activeStroke: Stroke | null = null
   private activeSource: InputSource | null = null
-  private previousFilteredPoint: CanvasPoint | null = null
-  private previousRawPoint: CanvasPoint | null = null
+  private gestureFilteredPoint: CanvasPoint | null = null
+  private gestureRawPoint: CanvasPoint | null = null
   private previousDrawnPoint: CanvasPoint | null = null
   private renderPoint: CanvasPoint | null = null
   private hasRenderedSegment = false
   private cursor: HTMLElement | null = null
+  private effectsEnabled = false
+  private reducedMotion = false
+  private particles: RuntimeParticle[] = []
+  private animationFrame: number | null = null
+  private performanceStage: StylePerformanceStage = 'full'
+  private performanceWindowStartedAt = 0
+  private performanceFrameCount = 0
+  private performanceListener: ((stage: StylePerformanceStage) => void) | null = null
 
   attach(canvas: HTMLCanvasElement) {
     const width = canvas.clientWidth
@@ -59,6 +85,7 @@ export class StrokeCanvasRenderer {
     this.width = width
     this.height = height
     this.resetActiveStroke()
+    this.resetGestureFilter()
     this.redraw()
   }
 
@@ -76,28 +103,59 @@ export class StrokeCanvasRenderer {
     this.brush = brush
   }
 
+  setEffectsEnabled(enabled: boolean) {
+    this.effectsEnabled = enabled
+    if (!enabled) {
+      this.clearParticles()
+      this.performanceStage = 'full'
+      this.performanceListener?.('full')
+    }
+    this.redraw()
+  }
+
+  setReducedMotion(reduced: boolean) {
+    this.reducedMotion = reduced
+    if (reduced) this.clearParticles()
+    this.redraw()
+  }
+
+  setPerformanceListener(listener: ((stage: StylePerformanceStage) => void) | null) {
+    this.performanceListener = listener
+  }
+
   setWritingROI(writingROI: WritingROI) {
     this.writingROI = writingROI
+    this.resetGestureFilter()
   }
 
   handleGesture(command: GestureCommand): Stroke | null {
     if (command.type === 'END_STROKE') {
       const stroke = this.finishStroke()
-      if (command.reason !== 'pinch-up') this.hideCursor()
+      if (command.reason !== 'pinch-up') {
+        this.hideCursor()
+        this.resetGestureFilter()
+      }
       return stroke
     }
 
     const mappedPoint = mapMirroredPoint(command.point, this.width, this.height, this.writingROI)
     if (!mappedPoint) return null
+    const stabilizedPoint = stabilizeGesturePoint(
+      this.gestureFilteredPoint,
+      this.gestureRawPoint,
+      mappedPoint,
+    )
+    this.gestureFilteredPoint = stabilizedPoint
+    this.gestureRawPoint = mappedPoint
 
-    this.updateCursor(mappedPoint, command.type === 'START_STROKE' || this.activeSource === 'gesture')
+    this.updateCursor(stabilizedPoint, command.type === 'START_STROKE' || this.activeSource === 'gesture')
     if (command.type === 'START_STROKE') {
-      this.startStroke(mappedPoint, command.timestamp, 'gesture')
+      this.startStroke(stabilizedPoint, command.timestamp, 'gesture')
       return null
     }
 
     if (this.activeSource === 'gesture') {
-      this.appendPoint(mappedPoint, command.timestamp, true)
+      this.appendPoint(stabilizedPoint, command.timestamp)
     }
     return null
   }
@@ -109,7 +167,7 @@ export class StrokeCanvasRenderer {
 
   appendMousePoint(point: CanvasPoint, timestamp: number) {
     if (!isFiniteCanvasPoint(point) || this.activeSource !== 'mouse') return
-    this.appendPoint(point, timestamp, false)
+    this.appendPoint(point, timestamp)
   }
 
   finishStroke(): Stroke | null {
@@ -119,6 +177,7 @@ export class StrokeCanvasRenderer {
       && this.hasRenderedSegment
       && this.renderPoint
       && this.previousDrawnPoint
+      && this.effectiveStyle(this.activeStroke.style) !== 'particle'
     ) {
       this.configureContext(this.activeStroke)
       this.context.beginPath()
@@ -147,23 +206,17 @@ export class StrokeCanvasRenderer {
       points: [{ ...point, t: timestamp }],
       color: this.brush.color,
       width: this.brush.width,
-      style: 'ink',
+      style: this.effectsEnabled ? this.brush.style : 'ink',
       createdAt: Date.now(),
     }
-    this.previousFilteredPoint = point
-    this.previousRawPoint = point
     this.previousDrawnPoint = point
     this.renderPoint = point
   }
 
-  private appendPoint(point: CanvasPoint, timestamp: number, smooth: boolean) {
+  private appendPoint(point: CanvasPoint, timestamp: number) {
     if (!this.activeStroke || !this.context || !this.previousDrawnPoint) return
 
-    const acceptedPoint = smooth
-      ? applyAxisAwareEma(this.previousFilteredPoint, this.previousRawPoint, point)
-      : point
-    this.previousFilteredPoint = acceptedPoint
-    this.previousRawPoint = point
+    const acceptedPoint = point
 
     if (!isPointFarEnough(this.previousDrawnPoint, acceptedPoint)) return
 
@@ -172,40 +225,56 @@ export class StrokeCanvasRenderer {
       y: (this.previousDrawnPoint.y + acceptedPoint.y) / 2,
     }
 
-    this.configureContext(this.activeStroke)
-    this.context.beginPath()
-    this.context.moveTo(
-      this.renderPoint?.x ?? this.previousDrawnPoint.x,
-      this.renderPoint?.y ?? this.previousDrawnPoint.y,
-    )
-    if (this.hasRenderedSegment) {
-      this.context.quadraticCurveTo(
-        this.previousDrawnPoint.x,
-        this.previousDrawnPoint.y,
-        midpoint.x,
-        midpoint.y,
+    if (this.effectiveStyle(this.activeStroke.style) !== 'particle') {
+      this.configureContext(this.activeStroke)
+      this.context.beginPath()
+      this.context.moveTo(
+        this.renderPoint?.x ?? this.previousDrawnPoint.x,
+        this.renderPoint?.y ?? this.previousDrawnPoint.y,
       )
-    } else {
-      this.context.lineTo(midpoint.x, midpoint.y)
+      if (this.hasRenderedSegment) {
+        this.context.quadraticCurveTo(
+          this.previousDrawnPoint.x,
+          this.previousDrawnPoint.y,
+          midpoint.x,
+          midpoint.y,
+        )
+      } else {
+        this.context.lineTo(midpoint.x, midpoint.y)
+      }
+      this.context.stroke()
     }
-    this.context.stroke()
 
     const strokePoint: StrokePoint = { ...acceptedPoint, t: timestamp }
     this.activeStroke.points.push(strokePoint)
     this.renderPoint = midpoint
     this.previousDrawnPoint = acceptedPoint
     this.hasRenderedSegment = true
+    if (this.activeStroke.style === 'particle' && this.effectsEnabled && !this.reducedMotion) {
+      this.emitParticles(midpoint, this.activeStroke.color, timestamp)
+    }
   }
 
   private redraw() {
     if (!this.context) return
     this.context.clearRect(0, 0, this.width, this.height)
     this.completedStrokes.forEach((stroke) => this.drawCompletedStroke(stroke))
+    if (this.activeStroke && this.activeStroke.points.length >= 2) this.drawCompletedStroke(this.activeStroke)
+    this.drawParticles(performance.now())
   }
 
   private drawCompletedStroke(stroke: Stroke) {
     if (!this.context || stroke.points.length < 2) return
+    if (this.effectiveStyle(stroke.style) === 'particle') {
+      this.drawParticleStroke(stroke)
+      return
+    }
     this.configureContext(stroke)
+    this.drawStrokePath(stroke)
+  }
+
+  private drawStrokePath(stroke: Stroke) {
+    if (!this.context || stroke.points.length < 2) return
     this.context.beginPath()
     this.context.moveTo(stroke.points[0].x, stroke.points[0].y)
 
@@ -228,22 +297,132 @@ export class StrokeCanvasRenderer {
     this.context.stroke()
   }
 
-  private configureContext(stroke: Pick<Stroke, 'color' | 'width'>) {
+  private drawParticleStroke(stroke: Stroke) {
     if (!this.context) return
+    const density = this.performanceStage === 'full' ? 'full' : 'reduced'
+    for (const particle of particleSamplesForStroke(stroke, density)) {
+      this.context.beginPath()
+      this.context.globalAlpha = particle.opacity
+      this.context.fillStyle = stroke.color
+      this.context.shadowColor = stroke.color
+      this.context.shadowBlur = particle.blur
+      this.context.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2)
+      this.context.fill()
+    }
+    this.context.globalAlpha = 1
+    this.context.shadowColor = 'transparent'
+    this.context.shadowBlur = 0
+  }
+
+  private configureContext(stroke: Pick<Stroke, 'color' | 'width' | 'style'>) {
+    if (!this.context) return
+    const style = this.effectiveStyle(stroke.style)
     this.context.strokeStyle = stroke.color
     this.context.lineWidth = stroke.width
     this.context.lineCap = 'round'
     this.context.lineJoin = 'round'
+    this.context.globalAlpha = 1
+    this.context.shadowColor = style === 'glow' && this.performanceStage !== 'no-trail' ? stroke.color : 'transparent'
+    this.context.shadowBlur = style === 'glow' && this.performanceStage !== 'no-trail' ? Math.max(8, stroke.width * 3) : 0
+  }
+
+  private effectiveStyle(style: VisualStyle): VisualStyle {
+    return this.effectsEnabled ? style : 'ink'
+  }
+
+  private emitParticles(point: CanvasPoint, color: string, createdAt: number) {
+    const count = this.performanceStage === 'full' ? 5 : 2
+    for (let index = 0; index < count; index += 1) {
+      const angle = ((this.particles.length + index * 3) % 11) * (Math.PI * 2 / 11)
+      const distance = 2 + (index % 3) * 2.2
+      this.particles.push({
+        x: point.x + Math.cos(angle) * distance,
+        y: point.y + Math.sin(angle) * distance,
+        color,
+        size: Math.max(0.8, this.brush.width * (0.2 + (index % 3) * 0.1)),
+        createdAt,
+        lifetime: 900,
+        blur: 0.8 + (index % 3) * 0.6,
+      })
+    }
+    this.scheduleParticleFrame()
+  }
+
+  private drawParticles(now: number) {
+    if (!this.context || !this.effectsEnabled || this.reducedMotion) return
+    this.particles = this.particles.filter((particle) => now - particle.createdAt < particle.lifetime)
+    for (const particle of this.particles) {
+      const progress = Math.max(0, Math.min(1, (now - particle.createdAt) / particle.lifetime))
+      this.context.globalAlpha = 1 - progress
+      this.context.fillStyle = particle.color
+      this.context.shadowColor = particle.color
+      this.context.shadowBlur = particle.blur
+      this.context.beginPath()
+      this.context.arc(
+        particle.x,
+        particle.y - progress * 6,
+        particle.size / 2,
+        0,
+        Math.PI * 2,
+      )
+      this.context.fill()
+    }
+    this.context.globalAlpha = 1
+    this.context.shadowColor = 'transparent'
+    this.context.shadowBlur = 0
+  }
+
+  private scheduleParticleFrame() {
+    if (this.animationFrame !== null || this.particles.length === 0 || this.reducedMotion) return
+    const requestFrame = typeof window.requestAnimationFrame === 'function'
+      ? window.requestAnimationFrame.bind(window)
+      : (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16)
+    this.animationFrame = requestFrame(this.animateParticles)
+  }
+
+  private animateParticles = (now: number) => {
+    this.animationFrame = null
+    this.measureStylePerformance(now)
+    this.redraw()
+    if (this.particles.length > 0) this.scheduleParticleFrame()
+  }
+
+  private measureStylePerformance(now: number) {
+    if (this.performanceWindowStartedAt === 0) this.performanceWindowStartedAt = now
+    this.performanceFrameCount += 1
+    const elapsed = now - this.performanceWindowStartedAt
+    if (elapsed < 3000) return
+    const fps = (this.performanceFrameCount * 1000) / elapsed
+    if (fps < 24) {
+      this.performanceStage = nextStylePerformanceStage(this.performanceStage, fps)
+      this.performanceListener?.(this.performanceStage)
+    }
+    this.performanceWindowStartedAt = now
+    this.performanceFrameCount = 0
+  }
+
+  private clearParticles() {
+    this.particles = []
+    if (this.animationFrame !== null) {
+      if (typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(this.animationFrame)
+      else window.clearTimeout(this.animationFrame)
+    }
+    this.animationFrame = null
+    this.performanceWindowStartedAt = 0
+    this.performanceFrameCount = 0
   }
 
   private resetActiveStroke() {
     this.activeStroke = null
     this.activeSource = null
-    this.previousFilteredPoint = null
-    this.previousRawPoint = null
     this.previousDrawnPoint = null
     this.renderPoint = null
     this.hasRenderedSegment = false
+  }
+
+  private resetGestureFilter() {
+    this.gestureFilteredPoint = null
+    this.gestureRawPoint = null
   }
 
   private updateCursor(point: CanvasPoint, drawing: boolean) {

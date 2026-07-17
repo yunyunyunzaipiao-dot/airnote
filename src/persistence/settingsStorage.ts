@@ -2,6 +2,7 @@ import {
   DEFAULT_SETTINGS,
   type AirNoteSettings,
   type BrushWidth,
+  type VisualStyle,
   type WritingROI,
 } from '../types/workspace'
 
@@ -9,6 +10,7 @@ export const SETTINGS_STORAGE_KEY = 'airnote.settings.current'
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i
 const BRUSH_WIDTHS = new Set<BrushWidth>([2, 4, 8])
+const VISUAL_STYLES = new Set<VisualStyle>(['ink', 'glow', 'particle'])
 
 export function normalizeBrushColor(value: string) {
   return HEX_COLOR.test(value) ? value.toUpperCase() : DEFAULT_SETTINGS.brush.color
@@ -35,15 +37,20 @@ export function parseSettings(value: unknown): AirNoteSettings {
   const thresholdsValid = Number.isFinite(down)
     && Number.isFinite(up)
     && (down as number) < (up as number)
+  const experimentalStylesEnabled = candidate.experimentalStylesEnabled === true
+  const visualStyle = VISUAL_STYLES.has(candidate.brush?.style as VisualStyle)
+    ? candidate.brush!.style
+    : DEFAULT_SETTINGS.brush.style
 
   return {
     inputMode: candidate.inputMode === 'gesture' ? 'gesture' : 'mouse',
+    experimentalStylesEnabled,
     brush: {
       color: normalizeBrushColor(candidate.brush?.color ?? ''),
       width: BRUSH_WIDTHS.has(candidate.brush?.width as BrushWidth)
         ? candidate.brush!.width
         : DEFAULT_SETTINGS.brush.width,
-      style: 'ink',
+      style: experimentalStylesEnabled ? visualStyle : 'ink',
     },
     gesture: {
       writingROI: isValidWritingROI(candidate.gesture?.writingROI)

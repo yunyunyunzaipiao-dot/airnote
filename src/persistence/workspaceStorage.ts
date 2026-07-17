@@ -49,10 +49,11 @@ function validBounds(value: unknown) {
 }
 
 function validSettings(value: unknown) {
-  if (!record(value) || !hasOnlyKeys(value, ['inputMode', 'brush', 'gesture'])) return false
+  if (!record(value) || !hasOnlyKeys(value, ['inputMode', 'brush', 'gesture'], ['experimentalStylesEnabled'])) return false
   if (value.inputMode !== 'mouse' && value.inputMode !== 'gesture') return false
+  if (value.experimentalStylesEnabled !== undefined && typeof value.experimentalStylesEnabled !== 'boolean') return false
   if (!record(value.brush) || !hasOnlyKeys(value.brush, ['color', 'width', 'style'])) return false
-  if (typeof value.brush.color !== 'string' || ![2, 4, 8].includes(value.brush.width as number) || value.brush.style !== 'ink') return false
+  if (typeof value.brush.color !== 'string' || ![2, 4, 8].includes(value.brush.width as number) || !['ink', 'glow', 'particle'].includes(value.brush.style as string)) return false
   if (!record(value.gesture) || !hasOnlyKeys(value.gesture, [
     'writingROI',
     'pinchDownThreshold',
@@ -99,7 +100,11 @@ export function validateProjectDetailed(value: unknown): ProjectValidationResult
     return { ok: false, error: { reason: 'invalid-format', damagedObjectCount: 0 } }
   }
 
-  const project = value as unknown as AirNoteProject
+  const project = structuredClone(value) as unknown as AirNoteProject
+  project.settings.experimentalStylesEnabled = value.settings && record(value.settings)
+    ? value.settings.experimentalStylesEnabled === true
+    : false
+  if (!project.settings.experimentalStylesEnabled) project.settings.brush.style = 'ink'
 
   for (const stroke of project.strokes) {
     if (!record(stroke) || !hasOnlyKeys(stroke, ['id', 'points', 'color', 'width', 'style', 'createdAt'], ['cardId'])) {
@@ -108,7 +113,7 @@ export function validateProjectDetailed(value: unknown): ProjectValidationResult
     if (typeof stroke.id !== 'string' || !Array.isArray(stroke.points) || !stroke.points.every(validPoint)) {
       return { ok: false, error: { reason: 'invalid-format', damagedObjectCount: 0 } }
     }
-    if (typeof stroke.color !== 'string' || ![2, 4, 8].includes(stroke.width) || stroke.style !== 'ink' || !finite(stroke.createdAt)) {
+    if (typeof stroke.color !== 'string' || ![2, 4, 8].includes(stroke.width) || !['ink', 'glow', 'particle'].includes(stroke.style) || !finite(stroke.createdAt)) {
       return { ok: false, error: { reason: 'invalid-format', damagedObjectCount: 0 } }
     }
     if (stroke.cardId !== undefined && typeof stroke.cardId !== 'string') {
@@ -217,9 +222,9 @@ export function loadWorkspace(storage: StorageLike = localStorage): { document: 
   const raw = storage.getItem(WORKSPACE_STORAGE_KEY)
   if (!raw) return null
   try {
-    const project: unknown = JSON.parse(raw)
-    if (!validateProject(project)) throw new Error('invalid project')
-    const { schemaVersion: _schemaVersion, settings, ...document } = project
+    const validation = validateProjectDetailed(JSON.parse(raw) as unknown)
+    if (!validation.ok) throw new Error('invalid project')
+    const { schemaVersion: _schemaVersion, settings, ...document } = validation.project
     return { document, settings: { ...settings, inputMode: 'mouse' } }
   } catch {
     storage.setItem(CORRUPT_WORKSPACE_KEY, raw)

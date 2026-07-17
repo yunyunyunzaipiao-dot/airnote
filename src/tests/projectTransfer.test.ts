@@ -77,4 +77,19 @@ describe('SAVE-02 project JSON transfer', () => {
     expect(result).toMatchObject({ ok: false, error: { reason: 'missing-references', damagedObjectCount: 1 } })
     expect(result.ok ? '' : result.message).toContain('发现1个损坏对象')
   })
+
+  it('round-trips enabled visual styles without changing any Stroke points', () => {
+    const source = largeProject()
+    source.settings.experimentalStylesEnabled = true
+    source.settings.brush.style = 'particle'
+    source.strokes[0].style = 'glow'
+    source.strokes[1].style = 'particle'
+    const pointsBefore = structuredClone(source.strokes.map((stroke) => stroke.points))
+    const result = parseProjectJson(serializeProject(source))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.project.settings.brush.style).toBe('particle')
+    expect(result.project.strokes.slice(0, 2).map((stroke) => stroke.style)).toEqual(['glow', 'particle'])
+    expect(result.project.strokes.map((stroke) => stroke.points)).toEqual(pointsBefore)
+  })
 })

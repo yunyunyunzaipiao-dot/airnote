@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { cardInkMetrics } from '../drawing/cardInk'
+import { particleSamplesForStroke } from '../drawing/particleStyle'
 import { automaticEdgeAnchors, cardAnchorPoint, closestCardAnchor, MIN_CARD_SIZE } from '../store/workspaceDocument'
 import type { CalibrationUiState } from '../store/useAirNoteRuntime'
 import type { Edge, EdgeAnchor, IdeaCard, InputMode, Stroke, StrokeGroup, WorkspaceTool } from '../types/workspace'
 
 interface WorkspaceCanvasProps {
   inputMode: InputMode
+  experimentalStylesEnabled: boolean
+  reducedMotion: boolean
   tool: WorkspaceTool
   edgeType: Edge['type']
   strokes: Stroke[]
@@ -149,8 +152,9 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
   }
 
   return (
-    <section ref={stageRef} className="canvas-stage" aria-labelledby="canvas-title">
-      <div className="canvas-stage__index" aria-hidden="true">00 / M2 WORKSPACE</div>
+    <section ref={stageRef} className={`canvas-stage canvas-stage--${inputMode}`} aria-labelledby="canvas-title">
+      <div className="canvas-stage__index" aria-hidden="true">00 / P1 STYLE LAB</div>
+      {inputMode === 'gesture' ? <div className="canvas-stage__edge-cue" aria-hidden="true">手势边缘提示</div> : null}
       <canvas
         ref={canvasRef}
         className={`workspace-canvas workspace-canvas--${inputMode} workspace-canvas--tool-${tool}`}
@@ -193,7 +197,18 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
             </div>
             {ink ? (
               <svg className="idea-card__ink" viewBox={`0 0 ${ink.size.width} ${ink.size.height}`} preserveAspectRatio="xMidYMid meet">
-                {cardStrokes.map((stroke) => <polyline key={stroke.id} points={stroke.points.map((point) => `${point.x - ink.origin.x},${point.y - ink.origin.y}`).join(' ')} fill="none" stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" />)}
+                {cardStrokes.map((stroke) => {
+                  const style = props.experimentalStylesEnabled ? stroke.style : 'ink'
+                  const particleSamples = style === 'particle' ? particleSamplesForStroke(stroke) : []
+                  return (
+                    <g key={stroke.id} className={`card-stroke card-stroke--${style}`} style={{ color: stroke.color }}>
+                      {style !== 'particle' ? <polyline points={stroke.points.map((point) => `${point.x - ink.origin.x},${point.y - ink.origin.y}`).join(' ')} fill="none" stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" /> : null}
+                      {style === 'particle'
+                        ? particleSamples.map((particle, index) => <circle key={`${stroke.id}-particle-${index}`} cx={particle.x - ink.origin.x} cy={particle.y - ink.origin.y} r={particle.radius} fill={stroke.color} opacity={particle.opacity} style={{ filter: `blur(${props.reducedMotion ? 0.7 : Math.min(1.8, particle.blur * 0.55)}px)` }} />)
+                        : null}
+                    </g>
+                  )
+                })}
               </svg>
             ) : null}
             <button className="idea-card__delete" type="button" aria-label={`删除卡片 ${card.title}`} onClick={() => props.onDeleteCard(card.id)}>×</button>
@@ -227,7 +242,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
       })}
       {currentGroup?.status === 'suggested' ? <div className="group-suggestion" style={{ left: currentGroup.boundingBox.x - 12, top: currentGroup.boundingBox.y - 12, width: currentGroup.boundingBox.width + 24, height: currentGroup.boundingBox.height + 24 }}><div><button type="button" onClick={props.onGenerateCard}>生成想法卡片</button><button type="button" onClick={props.onContinueGroup}>继续添加</button><button type="button" onClick={props.onCancelGroup}>取消分组</button></div></div> : null}
       {calibration.phase === 'roi' ? <div className={`calibration-target calibration-target--${calibration.roiStep}`} aria-hidden="true">{calibration.roiStep + 1}</div> : null}
-      <div className="canvas-stage__notice"><p className="eyebrow">P0 IDEA WORKSPACE</p><h2 id="canvas-title">{tool === 'draw' ? (inputMode === 'mouse' ? '鼠标画笔已启用' : '捏合落笔，松开断笔') : tool === 'select' ? '选择与整理卡片' : '从卡片锚点拖出连接'}</h2><p>笔迹、卡片与连接会在本地自动保存。卡片只引用原始 Stroke，不改写几何数据。</p>{tool === 'edge' ? <label className="edge-type-control">{selectedEdgeId ? '所选连接' : '新连接类型'}<select value={selectedEdgeId ? edges.find((edge) => edge.id === selectedEdgeId)?.type ?? props.edgeType : props.edgeType} onChange={(event) => { const type = event.target.value as Edge['type']; if (selectedEdgeId) props.onUpdateEdge(selectedEdgeId, type); else props.onEdgeTypeChange(type) }}><option value="undirected">无方向</option><option value="directed">有方向</option></select></label> : null}</div>
+      <div className="canvas-stage__notice"><p className="eyebrow">P1 STYLE-01 · P0 SAFE</p><h2 id="canvas-title">{tool === 'draw' ? (inputMode === 'mouse' ? '鼠标画笔已启用' : '捏合落笔，松开断笔') : tool === 'select' ? '选择与整理卡片' : '从卡片锚点拖出连接'}</h2><p>笔迹、卡片与连接会在本地自动保存。实验视觉只改变显示，不改写原始 Stroke。</p>{tool === 'edge' ? <label className="edge-type-control">{selectedEdgeId ? '所选连接' : '新连接类型'}<select value={selectedEdgeId ? edges.find((edge) => edge.id === selectedEdgeId)?.type ?? props.edgeType : props.edgeType} onChange={(event) => { const type = event.target.value as Edge['type']; if (selectedEdgeId) props.onUpdateEdge(selectedEdgeId, type); else props.onEdgeTypeChange(type) }}><option value="undirected">无方向</option><option value="directed">有方向</option></select></label> : null}</div>
       <div className="canvas-stage__coordinates" aria-hidden="true"><span>{inputMode.toUpperCase()}</span><span>{strokes.length} STROKES</span><span>{cards.length} CARDS / {edges.length} EDGES</span></div>
     </section>
   )

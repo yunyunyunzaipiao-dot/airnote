@@ -44,7 +44,7 @@ export function TopBar({
       <div className="brand-lockup">
         <span className="brand-mark" aria-hidden="true">空</span>
         <div>
-          <p className="eyebrow">AIRNOTE · M3 PORTABLE WORKSPACE</p>
+          <p className="eyebrow">AIRNOTE · P1 STYLE LAB</p>
           <h1>空书 <span>/ AirNote</span></h1>
         </div>
       </div>
@@ -58,13 +58,15 @@ export function TopBar({
 
       <nav className="top-bar__actions" aria-label="项目操作">
         <button type="button" className="history-action" aria-label="撤销" onClick={onUndo} disabled={!canUndo} title="撤销：Ctrl/Cmd+Z">
-          <strong>撤销</strong><span>Ctrl/Cmd+Z</span>
+          <span className="history-action__icon" aria-hidden="true">↶</span>
+          <span className="history-action__copy"><strong>撤销</strong><small>Ctrl/Cmd+Z</small></span>
         </button>
         <button type="button" className="history-action" aria-label="重做" onClick={onRedo} disabled={!canRedo} title="重做：Ctrl/Cmd+Shift+Z">
-          <strong>重做</strong><span>Ctrl/Cmd+Shift+Z</span>
+          <span className="history-action__icon" aria-hidden="true">↷</span>
+          <span className="history-action__copy"><strong>重做</strong><small>Ctrl/Cmd+Shift+Z</small></span>
         </button>
         <button type="button" className="danger-action" onClick={onClear} disabled={!hasContent}>清空</button>
-        <button type="button" className="project-action" onClick={onExportPng}>导出图片</button>
+        <button type="button" className="project-action project-action--primary" onClick={onExportPng}>导出图片</button>
         <button type="button" className="project-action" onClick={onExportProject}>导出项目</button>
         <button type="button" className="project-action" onClick={() => importInputRef.current?.click()}>导入项目</button>
         <input

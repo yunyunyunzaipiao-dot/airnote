@@ -1,4 +1,5 @@
 import { cardInkMetrics } from '../drawing/cardInk'
+import { particleSamplesForStroke } from '../drawing/particleStyle'
 import { automaticEdgeAnchors, cardAnchorPoint } from '../store/workspaceDocument'
 import type { AirNoteProject, IdeaCard, Stroke } from '../types/workspace'
 import { downloadBlob } from './download'
@@ -41,20 +42,48 @@ export function calculateExportBounds(project: AirNoteProject, padding = EXPORT_
   return { x: left, y: top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) }
 }
 
-function drawStroke(context: CanvasRenderingContext2D, stroke: Stroke, transform = (x: number, y: number) => ({ x, y }), widthScale = 1) {
+export function drawStroke(
+  context: CanvasRenderingContext2D,
+  stroke: Stroke,
+  transform = (x: number, y: number) => ({ x, y }),
+  widthScale = 1,
+  effectsEnabled = false,
+) {
   if (stroke.points.length < 2) return
-  const first = transform(stroke.points[0].x, stroke.points[0].y)
-  context.beginPath()
-  context.moveTo(first.x, first.y)
-  for (const point of stroke.points.slice(1)) {
-    const next = transform(point.x, point.y)
-    context.lineTo(next.x, next.y)
+  const style = effectsEnabled ? stroke.style : 'ink'
+  if (style !== 'particle') {
+    const first = transform(stroke.points[0].x, stroke.points[0].y)
+    context.save()
+    context.beginPath()
+    context.moveTo(first.x, first.y)
+    for (const point of stroke.points.slice(1)) {
+      const next = transform(point.x, point.y)
+      context.lineTo(next.x, next.y)
+    }
+    context.strokeStyle = stroke.color
+    context.lineWidth = stroke.width * widthScale
+    context.lineCap = 'round'
+    context.lineJoin = 'round'
+    context.globalAlpha = 1
+    context.shadowColor = style === 'glow' ? stroke.color : 'transparent'
+    context.shadowBlur = style === 'glow' ? Math.max(8, stroke.width * widthScale * 3) : 0
+    context.stroke()
+    context.restore()
   }
-  context.strokeStyle = stroke.color
-  context.lineWidth = stroke.width * widthScale
-  context.lineCap = 'round'
-  context.lineJoin = 'round'
-  context.stroke()
+  if (style === 'particle') {
+    context.save()
+    context.fillStyle = stroke.color
+    context.shadowColor = stroke.color
+    particleSamplesForStroke(stroke).forEach((sample) => {
+      const particle = transform(sample.x, sample.y)
+      context.beginPath()
+      context.globalAlpha = sample.opacity
+      context.shadowBlur = sample.blur * widthScale
+      context.arc(particle.x, particle.y, sample.radius * widthScale, 0, Math.PI * 2)
+      context.fill()
+    })
+    context.restore()
+  }
 }
 
 function drawArrow(context: CanvasRenderingContext2D, start: { x: number; y: number }, end: { x: number; y: number }) {
@@ -69,7 +98,7 @@ function drawArrow(context: CanvasRenderingContext2D, start: { x: number; y: num
   context.fill()
 }
 
-function drawCardInk(context: CanvasRenderingContext2D, card: IdeaCard, strokes: Stroke[]) {
+function drawCardInk(context: CanvasRenderingContext2D, card: IdeaCard, strokes: Stroke[], effectsEnabled: boolean) {
   const ink = cardInkMetrics(strokes)
   if (!ink) return
   const scale = Math.min(card.size.width / ink.size.width, card.size.height / ink.size.height)
@@ -83,7 +112,7 @@ function drawCardInk(context: CanvasRenderingContext2D, card: IdeaCard, strokes:
   context.beginPath()
   context.rect(card.position.x, card.position.y, card.size.width, card.size.height)
   context.clip()
-  strokes.forEach((stroke) => drawStroke(context, stroke, transform, scale))
+  strokes.forEach((stroke) => drawStroke(context, stroke, transform, scale, effectsEnabled))
   context.restore()
 }
 
@@ -114,7 +143,9 @@ export function renderProjectPng(project: AirNoteProject, canvas: HTMLCanvasElem
     context.stroke()
   }
 
-  project.strokes.filter((stroke) => !stroke.cardId).forEach((stroke) => drawStroke(context, stroke))
+  project.strokes
+    .filter((stroke) => !stroke.cardId)
+    .forEach((stroke) => drawStroke(context, stroke, undefined, 1, project.settings.experimentalStylesEnabled))
 
   for (const edge of project.edges) {
     const source = project.cards.find((card) => card.id === edge.sourceCardId)
@@ -141,7 +172,7 @@ export function renderProjectPng(project: AirNoteProject, canvas: HTMLCanvasElem
   for (const card of project.cards) {
     context.fillStyle = '#fffdf5'
     context.fillRect(card.position.x, card.position.y, card.size.width, card.size.height)
-    drawCardInk(context, card, project.strokes.filter((stroke) => card.strokeIds.includes(stroke.id)))
+    drawCardInk(context, card, project.strokes.filter((stroke) => card.strokeIds.includes(stroke.id)), project.settings.experimentalStylesEnabled)
     context.strokeStyle = 'rgba(19, 33, 38, 0.36)'
     context.lineWidth = 1
     context.strokeRect(card.position.x, card.position.y, card.size.width, card.size.height)

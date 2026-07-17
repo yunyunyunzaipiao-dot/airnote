@@ -6,6 +6,11 @@ export const HORIZONTAL_FORWARD_ALPHA = 0.62
 export const HORIZONTAL_ORTHOGONAL_ALPHA = 0.18
 export const HORIZONTAL_DOMINANCE_RATIO = 4
 export const MIN_POINT_DISTANCE = 2
+export const CALIBRATED_ROI_INSET_RATIO = 0.06
+export const GESTURE_DEAD_ZONE_PX = 3
+export const GESTURE_SLOW_ALPHA = 0.18
+export const GESTURE_MEDIUM_ALPHA = 0.35
+export const GESTURE_FAST_ALPHA = 0.62
 
 export function mapMirroredPoint(
   point: NormalizedPoint,
@@ -30,11 +35,48 @@ export function mapMirroredPoint(
   const roiHeight = roi.bottom - roi.top
   if (roiWidth < 0.25 || roiHeight < 0.25) return null
 
-  const normalizedX = (point.x - roi.left) / roiWidth
-  const normalizedY = (point.y - roi.top) / roiHeight
+  const usesCalibratedRoi = roi.left > 0 || roi.top > 0 || roi.right < 1 || roi.bottom < 1
+  const horizontalInset = usesCalibratedRoi ? roiWidth * CALIBRATED_ROI_INSET_RATIO : 0
+  const verticalInset = usesCalibratedRoi ? roiHeight * CALIBRATED_ROI_INSET_RATIO : 0
+  const activeLeft = roi.left + horizontalInset
+  const activeTop = roi.top + verticalInset
+  const activeWidth = roiWidth - horizontalInset * 2
+  const activeHeight = roiHeight - verticalInset * 2
+  const normalizedX = (point.x - activeLeft) / activeWidth
+  const normalizedY = (point.y - activeTop) / activeHeight
   const mirroredX = Math.min(1, Math.max(0, 1 - normalizedX))
   const clampedY = Math.min(1, Math.max(0, normalizedY))
   return { x: mirroredX * width, y: clampedY * height }
+}
+
+export function stabilizeGesturePoint(
+  previousFiltered: CanvasPoint | null,
+  previousRaw: CanvasPoint | null,
+  current: CanvasPoint,
+): CanvasPoint {
+  if (!previousFiltered || !previousRaw) return current
+
+  const distanceFromFiltered = Math.hypot(
+    current.x - previousFiltered.x,
+    current.y - previousFiltered.y,
+  )
+  if (distanceFromFiltered <= GESTURE_DEAD_ZONE_PX) return previousFiltered
+
+  const rawStep = Math.hypot(current.x - previousRaw.x, current.y - previousRaw.y)
+  const alpha = rawStep <= 8
+    ? GESTURE_SLOW_ALPHA
+    : rawStep <= 28
+      ? GESTURE_MEDIUM_ALPHA
+      : GESTURE_FAST_ALPHA
+  const deltaX = Math.abs(current.x - previousRaw.x)
+  const deltaY = Math.abs(current.y - previousRaw.y)
+  const isHorizontal = deltaX >= deltaY * HORIZONTAL_DOMINANCE_RATIO
+
+  return {
+    x: alpha * current.x + (1 - alpha) * previousFiltered.x,
+    y: (isHorizontal ? Math.min(alpha, HORIZONTAL_ORTHOGONAL_ALPHA) : alpha) * current.y
+      + (1 - (isHorizontal ? Math.min(alpha, HORIZONTAL_ORTHOGONAL_ALPHA) : alpha)) * previousFiltered.y,
+  }
 }
 
 export function applyEma(

@@ -9,7 +9,7 @@ export const DEFAULT_DOWN_THRESHOLD = 0.35
 export const DEFAULT_UP_THRESHOLD = 0.42
 export const MAX_FRAME_GAP_MS = 250
 export const LOST_FRAME_LIMIT = 3
-export const UP_FRAME_LIMIT = 1
+export const UP_FRAME_LIMIT = 2
 export const FAST_RELEASE_FRAME_LIMIT = 3
 export const FAST_TIP_MOVEMENT_THRESHOLD = 0.035
 

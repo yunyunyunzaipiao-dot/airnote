@@ -14,7 +14,7 @@ import {
   requestCameraStream,
   stopCameraStream,
 } from '../camera/camera'
-import { StrokeCanvasRenderer } from '../drawing/canvasRenderer'
+import { StrokeCanvasRenderer, type StylePerformanceStage } from '../drawing/canvasRenderer'
 import { calculatePinchRatio, createGestureMachine, stepGestureMachine, stopGestureMachine } from '../gesture/pinchStateMachine'
 import {
   createWorkspaceHistory,
@@ -118,6 +118,8 @@ export function useAirNoteRuntime() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [tool, setToolState] = useState<WorkspaceTool>('draw')
   const [edgeType, setEdgeType] = useState<Edge['type']>('undirected')
+  const [stylePerformanceStage, setStylePerformanceStage] = useState<StylePerformanceStage>('full')
+  const [reducedMotion, setReducedMotion] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -147,6 +149,7 @@ export function useAirNoteRuntime() {
   const publishSettings = useCallback((next: AirNoteSettings) => {
     settingsRef.current = next
     rendererRef.current.setBrush(next.brush)
+    rendererRef.current.setEffectsEnabled(next.experimentalStylesEnabled)
     rendererRef.current.setWritingROI(next.gesture.writingROI)
     setSettings(next)
     try {
@@ -419,6 +422,7 @@ export function useAirNoteRuntime() {
     rendererRef.current.attach(canvas)
     rendererRef.current.attachCursor(cursor)
     rendererRef.current.setBrush(settingsRef.current.brush)
+    rendererRef.current.setEffectsEnabled(settingsRef.current.experimentalStylesEnabled)
     rendererRef.current.setWritingROI(settingsRef.current.gesture.writingROI)
     rendererRef.current.setCompletedStrokes(documentRef.current.strokes.filter((stroke) => !stroke.cardId))
   }, [finishRendererStroke])
@@ -439,7 +443,19 @@ export function useAirNoteRuntime() {
   }, [finishRendererStroke])
 
   const updateBrush = useCallback((brush: BrushSettings) => {
-    publishSettings({ ...settingsRef.current, brush })
+    publishSettings({
+      ...settingsRef.current,
+      brush: settingsRef.current.experimentalStylesEnabled ? brush : { ...brush, style: 'ink' },
+    })
+  }, [publishSettings])
+
+  const setExperimentalStylesEnabled = useCallback((enabled: boolean) => {
+    publishSettings({
+      ...settingsRef.current,
+      experimentalStylesEnabled: enabled,
+      brush: enabled ? settingsRef.current.brush : { ...settingsRef.current.brush, style: 'ink' },
+    })
+    if (!enabled) setStylePerformanceStage('full')
   }, [publishSettings])
 
   const undo = useCallback(() => {
@@ -722,6 +738,26 @@ export function useAirNoteRuntime() {
   }, [])
 
   useEffect(() => {
+    const media = window.matchMedia?.('(prefers-reduced-motion: reduce)')
+    const publish = () => {
+      const reduced = media?.matches === true
+      setReducedMotion(reduced)
+      rendererRef.current.setReducedMotion(reduced)
+    }
+    publish()
+    media?.addEventListener?.('change', publish)
+    return () => media?.removeEventListener?.('change', publish)
+  }, [])
+
+  useEffect(() => {
+    rendererRef.current.setPerformanceListener((stage) => {
+      setStylePerformanceStage(stage)
+      if (stage !== 'full') setWorkspaceMessage('已开启性能模式，实验视觉已自动降级。')
+    })
+    return () => rendererRef.current.setPerformanceListener(null)
+  }, [])
+
+  useEffect(() => {
     if (!hydratedRef.current) {
       hydratedRef.current = true
       rendererRef.current.setCompletedStrokes(documentState.strokes.filter((stroke) => !stroke.cardId))
@@ -790,6 +826,8 @@ export function useAirNoteRuntime() {
     currentGroup: documentState.groups.find((group) => group.status !== 'committed') ?? null,
     tool,
     edgeType,
+    stylePerformanceStage,
+    reducedMotion,
     saveStatus,
     calibration,
     workspaceMessage,
@@ -805,6 +843,7 @@ export function useAirNoteRuntime() {
     appendMousePoint,
     endMouseStroke,
     updateBrush,
+    setExperimentalStylesEnabled,
     undo,
     redo,
     clearWorkspace,

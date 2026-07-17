@@ -2,6 +2,7 @@ import type { CanvasPoint } from './m0'
 
 export type InputMode = 'gesture' | 'mouse'
 export type BrushWidth = 2 | 4 | 8
+export type VisualStyle = 'ink' | 'glow' | 'particle'
 export type WorkspaceTool = 'draw' | 'select' | 'edge'
 
 export interface StrokePoint extends CanvasPoint {
@@ -13,7 +14,7 @@ export interface Stroke {
   points: StrokePoint[]
   color: string
   width: BrushWidth
-  style: 'ink'
+  style: VisualStyle
   createdAt: number
   cardId?: string
 }
@@ -63,7 +64,7 @@ export interface WorkspaceMetadata {
 export interface BrushSettings {
   color: string
   width: BrushWidth
-  style: 'ink'
+  style: VisualStyle
 }
 
 export interface WritingROI {
@@ -86,6 +87,7 @@ export interface AirNoteSettings {
   inputMode: InputMode
   brush: BrushSettings
   gesture: GestureSettings
+  experimentalStylesEnabled: boolean
 }
 
 export interface WorkspaceDocument {
@@ -117,6 +119,7 @@ export const DEFAULT_WRITING_ROI: WritingROI = {
 export const DEFAULT_SETTINGS: AirNoteSettings = {
   inputMode: 'mouse',
   brush: DEFAULT_BRUSH,
+  experimentalStylesEnabled: false,
   gesture: {
     writingROI: DEFAULT_WRITING_ROI,
     pinchDownThreshold: 0.35,

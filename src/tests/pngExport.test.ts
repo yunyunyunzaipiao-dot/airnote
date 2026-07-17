@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { calculateExportBounds, renderProjectPng } from '../export/pngExport'
+import { calculateExportBounds, drawStroke, renderProjectPng } from '../export/pngExport'
 import { DEFAULT_SETTINGS, type AirNoteProject } from '../types/workspace'
 
 function visualProject(): AirNoteProject {
@@ -21,14 +21,24 @@ function visualProject(): AirNoteProject {
 }
 
 function canvasHarness() {
+  const shadowBlurValues: number[] = []
+  let shadowBlur = 0
   const context = {
     fillStyle: '', strokeStyle: '', lineWidth: 0, lineCap: '', lineJoin: '', font: '', textAlign: '', textBaseline: '',
-    fillRect: vi.fn(), setTransform: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(),
+    globalAlpha: 1, shadowColor: 'transparent',
+    fillRect: vi.fn(), setTransform: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(), arc: vi.fn(),
     closePath: vi.fn(), fill: vi.fn(), save: vi.fn(), rect: vi.fn(), clip: vi.fn(), restore: vi.fn(),
     strokeRect: vi.fn(), fillText: vi.fn(),
   }
+  Object.defineProperty(context, 'shadowBlur', {
+    get: () => shadowBlur,
+    set: (value: number) => {
+      shadowBlur = value
+      shadowBlurValues.push(value)
+    },
+  })
   const canvas = { width: 0, height: 0, getContext: vi.fn(() => context) } as unknown as HTMLCanvasElement
-  return { canvas, context }
+  return { canvas, context, shadowBlurValues }
 }
 
 describe('SAVE-02 PNG export renderer', () => {
@@ -46,5 +56,29 @@ describe('SAVE-02 PNG export renderer', () => {
     expect(context.strokeRect).toHaveBeenCalledTimes(2)
     expect(context.fillText).toHaveBeenCalledWith('导出卡片', 310, 269)
     expect(context.fillText).toHaveBeenCalledWith('目标', 570, 269)
+  })
+
+  it('reflects enabled Glow and Particle styles without changing Stroke points', () => {
+    const project = visualProject()
+    project.settings.experimentalStylesEnabled = true
+    project.strokes[0].style = 'glow'
+    project.strokes[1].style = 'particle'
+    const pointsBefore = structuredClone(project.strokes.map((stroke) => stroke.points))
+    const { canvas, context, shadowBlurValues } = canvasHarness()
+    renderProjectPng(project, canvas)
+    expect(shadowBlurValues.some((value) => value > 0)).toBe(true)
+    expect(context.arc).toHaveBeenCalled()
+    expect(project.strokes.map((stroke) => stroke.points)).toEqual(pointsBefore)
+  })
+
+  it('exports a Particle-only Stroke without a center path', () => {
+    const project = visualProject()
+    project.settings.experimentalStylesEnabled = true
+    const stroke = { ...project.strokes[0], style: 'particle' as const }
+    const { context } = canvasHarness()
+
+    drawStroke(context as unknown as CanvasRenderingContext2D, stroke, undefined, 1, true)
+    expect(context.arc).toHaveBeenCalled()
+    expect(context.stroke).not.toHaveBeenCalled()
   })
 })

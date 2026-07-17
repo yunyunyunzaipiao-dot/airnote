@@ -42,8 +42,12 @@ describe('pinch state machine', () => {
     expect(result.commands).toContainEqual(expect.objectContaining({ type: 'START_STROKE' }))
   })
 
-  it('ends on the first frame above the reduced release threshold', () => {
-    const result = stepGestureMachine(enterDrawing(), frame(48, 0.43))
+  it('requires two consecutive release frames before ending a slow stroke', () => {
+    let result = stepGestureMachine(enterDrawing(), frame(48, 0.43))
+    expect(result.machine.state).toBe('DRAWING')
+    expect(result.commands).toEqual([])
+
+    result = stepGestureMachine(result.machine, frame(64, 0.43))
     expect(result.machine.state).toBe('HOVER')
     expect(result.commands).toEqual([{ type: 'END_STROKE', reason: 'pinch-up' }])
   })

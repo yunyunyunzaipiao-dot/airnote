@@ -35,4 +35,25 @@ describe('settings persistence', () => {
     }
     expect(loadSettings(storage).gesture.calibrated).toBe(false)
   })
+
+  it('keeps experimental styles off by default and persists an explicit style choice', () => {
+    const disabled = loadSettings({
+      getItem: () => JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        brush: { ...DEFAULT_SETTINGS.brush, style: 'particle' },
+      }),
+    })
+    expect(disabled.experimentalStylesEnabled).toBe(false)
+    expect(disabled.brush.style).toBe('ink')
+
+    const enabled = loadSettings({
+      getItem: () => JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        experimentalStylesEnabled: true,
+        brush: { ...DEFAULT_SETTINGS.brush, style: 'glow' },
+      }),
+    })
+    expect(enabled.experimentalStylesEnabled).toBe(true)
+    expect(enabled.brush.style).toBe('glow')
+  })
 })

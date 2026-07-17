@@ -4,6 +4,7 @@ import {
   applyEma,
   isPointFarEnough,
   mapMirroredPoint,
+  stabilizeGesturePoint,
 } from '../drawing/trajectory'
 
 describe('M0 trajectory processing', () => {
@@ -19,6 +20,19 @@ describe('M0 trajectory processing', () => {
     const roi = { left: 0.2, top: 0.2, right: 0.8, bottom: 0.8 }
     expect(mapMirroredPoint({ x: 0.2, y: 0.2 }, 100, 100, roi)).toEqual({ x: 100, y: 0 })
     expect(mapMirroredPoint({ x: 0.8, y: 0.8 }, 100, 100, roi)).toEqual({ x: 0, y: 100 })
+  })
+
+  it('uses the calibrated safety margin as edge tolerance instead of requiring extra reach', () => {
+    const roi = { left: 0.152, top: 0.152, right: 0.848, bottom: 0.848 }
+    const mapped = mapMirroredPoint({ x: 0.2, y: 0.5 }, 100, 100, roi)!
+    expect(mapped.x).toBeGreaterThan(98)
+    expect(mapped.y).toBeCloseTo(50)
+  })
+
+  it('holds stationary gesture jitter and follows deliberate movement adaptively', () => {
+    expect(stabilizeGesturePoint({ x: 50, y: 50 }, { x: 50, y: 50 }, { x: 52, y: 51 })).toEqual({ x: 50, y: 50 })
+    expect(stabilizeGesturePoint({ x: 50, y: 50 }, { x: 50, y: 50 }, { x: 56, y: 50 })).toEqual({ x: 51.08, y: 50 })
+    expect(stabilizeGesturePoint({ x: 50, y: 50 }, { x: 50, y: 50 }, { x: 90, y: 50 })).toEqual({ x: 74.8, y: 50 })
   })
 
   it('suppresses vertical jitter during horizontal movement', () => {

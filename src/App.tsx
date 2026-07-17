@@ -46,13 +46,27 @@ export function App() {
     runtime.replaceProject(result.project)
   }
 
+  const handleCardAction = () => {
+    if (runtime.currentGroup?.status === 'suggested') {
+      runtime.generateCard()
+      return
+    }
+    if (runtime.document.cards.length > 0) {
+      runtime.setTool('select')
+      runtime.reportWorkspaceMessage('已进入卡片整理模式。可拖动、改名、调整大小或删除卡片。')
+      return
+    }
+    runtime.reportWorkspaceMessage(
+      runtime.currentGroup
+        ? '当前笔画组仍在收集，请停笔片刻，出现生成建议后再点击“卡片”。'
+        : '请先用画笔完成一组笔画，出现生成建议后再点击“卡片”。',
+    )
+  }
+
   return (
     <main className="app-shell">
       {!pointerEventsSupported ? (
         <p className="blocking-banner" role="alert">当前浏览器不受支持，请使用最新版 Chrome 或 Edge。</p>
-      ) : null}
-      {runtime.workspaceMessage ? (
-        <p className="workspace-toast" role="status">{runtime.workspaceMessage}</p>
       ) : null}
       <TopBar
         cameraStatus={runtime.uiState.cameraStatus}
@@ -69,32 +83,7 @@ export function App() {
         onImportProject={importProject}
       />
       <div className="workspace-layout">
-        <LeftToolbar tool={runtime.tool} onChange={runtime.setTool} />
-        <WorkspaceCanvas
-          inputMode={runtime.settings.inputMode}
-          tool={runtime.tool}
-          edgeType={runtime.edgeType}
-          strokes={runtime.strokes}
-          cards={runtime.document.cards}
-          edges={runtime.document.edges}
-          currentGroup={runtime.currentGroup}
-          calibration={runtime.calibration}
-          onReady={runtime.attachCanvas}
-          onPointerStart={runtime.startMouseStroke}
-          onPointerMove={runtime.appendMousePoint}
-          onPointerEnd={runtime.endMouseStroke}
-          onGenerateCard={runtime.generateCard}
-          onContinueGroup={runtime.continueGroup}
-          onCancelGroup={runtime.cancelGroup}
-          onMoveCard={runtime.commitCardMove}
-          onResizeCard={runtime.commitCardResize}
-          onRenameCard={runtime.commitCardRename}
-          onDeleteCard={runtime.commitCardDelete}
-          onCreateEdge={runtime.commitEdge}
-          onUpdateEdge={runtime.commitEdgeType}
-          onEdgeTypeChange={runtime.setEdgeType}
-        />
-        <aside className="context-rail" aria-label="摄像头、手势与属性面板">
+        <aside className="context-rail context-rail--input" aria-label="摄像头与手势面板">
           <CameraPreview
             status={runtime.uiState.cameraStatus}
             settings={runtime.uiState.cameraSettings}
@@ -109,6 +98,40 @@ export function App() {
             onUseDefaultCalibration={runtime.skipCalibration}
           />
           <GestureStatus diagnostics={runtime.uiState.diagnostics} />
+          {runtime.workspaceMessage ? (
+            <p className="workspace-toast" role="status">{runtime.workspaceMessage}</p>
+          ) : null}
+        </aside>
+        <div className="workspace-primary">
+          <LeftToolbar tool={runtime.tool} onChange={runtime.setTool} onCardAction={handleCardAction} />
+          <WorkspaceCanvas
+            inputMode={runtime.settings.inputMode}
+            experimentalStylesEnabled={runtime.settings.experimentalStylesEnabled}
+            reducedMotion={runtime.reducedMotion}
+            tool={runtime.tool}
+            edgeType={runtime.edgeType}
+            strokes={runtime.strokes}
+            cards={runtime.document.cards}
+            edges={runtime.document.edges}
+            currentGroup={runtime.currentGroup}
+            calibration={runtime.calibration}
+            onReady={runtime.attachCanvas}
+            onPointerStart={runtime.startMouseStroke}
+            onPointerMove={runtime.appendMousePoint}
+            onPointerEnd={runtime.endMouseStroke}
+            onGenerateCard={runtime.generateCard}
+            onContinueGroup={runtime.continueGroup}
+            onCancelGroup={runtime.cancelGroup}
+            onMoveCard={runtime.commitCardMove}
+            onResizeCard={runtime.commitCardResize}
+            onRenameCard={runtime.commitCardRename}
+            onDeleteCard={runtime.commitCardDelete}
+            onCreateEdge={runtime.commitEdge}
+            onUpdateEdge={runtime.commitEdgeType}
+            onEdgeTypeChange={runtime.setEdgeType}
+          />
+        </div>
+        <aside className="context-rail context-rail--settings" aria-label="校准与画笔属性面板">
           <CalibrationPanel
             calibration={runtime.calibration}
             cameraRunning={runtime.uiState.cameraStatus === 'running'}
@@ -117,7 +140,14 @@ export function App() {
             onConfirm={runtime.confirmCalibration}
             onSkip={runtime.skipCalibration}
           />
-          <PropertyPanel brush={runtime.settings.brush} onChange={runtime.updateBrush} />
+          <PropertyPanel
+            brush={runtime.settings.brush}
+            experimentalStylesEnabled={runtime.settings.experimentalStylesEnabled}
+            performanceStage={runtime.stylePerformanceStage}
+            reducedMotion={runtime.reducedMotion}
+            onChange={runtime.updateBrush}
+            onExperimentalStylesChange={runtime.setExperimentalStylesEnabled}
+          />
         </aside>
       </div>
     </main>

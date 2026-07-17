@@ -25,11 +25,17 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
     moveTo() {},
     lineTo() {},
     quadraticCurveTo() {},
+    arc() {},
     stroke() {},
+    fill() {},
     strokeStyle: '',
+    fillStyle: '',
     lineWidth: 1,
     lineCap: 'butt',
     lineJoin: 'miter',
+    globalAlpha: 1,
+    shadowColor: 'transparent',
+    shadowBlur: 0,
   }),
 })
 
