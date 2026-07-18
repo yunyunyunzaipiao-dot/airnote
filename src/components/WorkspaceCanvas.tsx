@@ -8,6 +8,12 @@ import {
   type CardResizeHandle,
 } from '../layout/cardResize'
 import { placeGroupSuggestionActions } from '../layout/groupSuggestionPlacement'
+import {
+  selectionRect,
+  strokeIdsInFreeform,
+  strokeIdsInRectangle,
+  type SelectionPoint,
+} from '../selection/strokeSelection'
 import { automaticEdgeAnchors, cardAnchorPoint, closestCardAnchor, MIN_CARD_SIZE } from '../store/workspaceDocument'
 import type { CalibrationUiState } from '../store/useAirNoteRuntime'
 import type { Edge, EdgeAnchor, IdeaCard, InputMode, Stroke, StrokeGroup, WorkspaceTool } from '../types/workspace'
@@ -27,6 +33,7 @@ interface WorkspaceCanvasProps {
   onPointerStart: (point: { x: number; y: number }, timestamp: number) => void
   onPointerMove: (point: { x: number; y: number }, timestamp: number) => void
   onPointerEnd: () => void
+  onSuggestSelection: (strokeIds: string[]) => boolean
   onGenerateCard: () => void
   onContinueGroup: () => void
   onCancelGroup: () => void
@@ -53,6 +60,14 @@ interface CardDragPreview {
   y: number
 }
 
+interface SelectionDraft {
+  pointerId: number
+  mode: 'rect' | 'free'
+  start: SelectionPoint
+  current: SelectionPoint
+  points: SelectionPoint[]
+}
+
 export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
   const { inputMode, tool, strokes, cards, edges, currentGroup, calibration } = props
   const stageRef = useRef<HTMLElement>(null)
@@ -74,7 +89,14 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
   } | null>(null)
   const [edgeDraft, setEdgeDraft] = useState<{ sourceCardId: string; sourceAnchor: EdgeAnchor; x: number; y: number; targetCardId: string | null; targetAnchor: EdgeAnchor | null } | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const [selection, setSelection] = useState<SelectionDraft | null>(null)
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 })
+
+  useEffect(() => {
+    if (tool !== 'lasso-rect' && tool !== 'lasso-free') {
+      setSelection(null)
+    }
+  }, [tool])
 
   useEffect(() => {
     const stage = stageRef.current
@@ -152,7 +174,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
   }
 
   const beginCardDrag = (event: PointerEvent<HTMLDivElement>, card: IdeaCard) => {
-    if (tool === 'draw' || editingCardId === card.id || event.button !== 0) return
+    if (tool !== 'select' || editingCardId === card.id || event.button !== 0) return
     event.currentTarget.setPointerCapture(event.pointerId)
     const next = {
       cardId: card.id,
@@ -253,7 +275,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
   }
 
   const beginEdge = (event: PointerEvent<HTMLButtonElement>, cardId: string, sourceAnchor: EdgeAnchor) => {
-    if (tool === 'draw') return
+    if (tool !== 'select') return
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
     const source = cards.find((card) => card.id === cardId)
@@ -283,6 +305,61 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     setEdgeDraft(null)
   }
 
+  const beginCanvasAction = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (inputMode !== 'mouse' || event.button !== 0) return
+    if (tool === 'draw') {
+      event.currentTarget.setPointerCapture(event.pointerId)
+      props.onPointerStart(canvasPoint(event), event.timeStamp)
+      return
+    }
+    if (tool !== 'lasso-rect' && tool !== 'lasso-free') return
+    const point = canvasPoint(event)
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setSelection({
+      pointerId: event.pointerId,
+      mode: tool === 'lasso-rect' ? 'rect' : 'free',
+      start: point,
+      current: point,
+      points: [point],
+    })
+  }
+
+  const moveCanvasAction = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+    if (tool === 'draw') {
+      props.onPointerMove(canvasPoint(event), event.timeStamp)
+      return
+    }
+    const point = canvasPoint(event)
+    setSelection((current) => {
+      if (!current || current.pointerId !== event.pointerId) return current
+      return {
+        ...current,
+        current: point,
+        points: current.mode === 'free' ? [...current.points, point] : current.points,
+      }
+    })
+  }
+
+  const finishCanvasAction = (event: PointerEvent<HTMLCanvasElement>, cancelled: boolean) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    if (tool === 'draw') {
+      props.onPointerEnd()
+      return
+    }
+    if (!selection || selection.pointerId !== event.pointerId) return
+    if (!cancelled) {
+      const end = canvasPoint(event)
+      const strokeIds = selection.mode === 'rect'
+        ? strokeIdsInRectangle(strokes, selectionRect(selection.start, end))
+        : strokeIdsInFreeform(strokes, [...selection.points, end])
+      props.onSuggestSelection(strokeIds)
+    }
+    setSelection(null)
+  }
+
   const groupActionPosition = currentGroup?.status === 'suggested'
     ? placeGroupSuggestionActions(currentGroup.boundingBox, stageSize)
     : null
@@ -295,11 +372,21 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
         ref={canvasRef}
         className={`workspace-canvas workspace-canvas--${inputMode} workspace-canvas--tool-${tool}`}
         aria-label={inputMode === 'mouse' ? '鼠标绘图画布' : '空中手势绘图画布'}
-        onPointerDown={(event) => { if (inputMode === 'mouse' && tool === 'draw' && event.button === 0) { event.currentTarget.setPointerCapture(event.pointerId); props.onPointerStart(canvasPoint(event), event.timeStamp) } }}
-        onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) props.onPointerMove(canvasPoint(event), event.timeStamp) }}
-        onPointerUp={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); props.onPointerEnd() }}
-        onPointerCancel={props.onPointerEnd}
+        onPointerDown={beginCanvasAction}
+        onPointerMove={moveCanvasAction}
+        onPointerUp={(event) => finishCanvasAction(event, false)}
+        onPointerCancel={(event) => finishCanvasAction(event, true)}
       />
+      {selection ? (
+        <svg className="selection-layer" aria-hidden="true">
+          {selection.mode === 'rect' ? (() => {
+            const rect = selectionRect(selection.start, selection.current)
+            return <rect x={rect.x} y={rect.y} width={rect.width} height={rect.height} />
+          })() : (
+            <polyline points={selection.points.map((point) => `${point.x},${point.y}`).join(' ')} />
+          )}
+        </svg>
+      ) : null}
       <svg className="edge-layer" aria-label="卡片连接线">
         <defs><marker id="edge-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker></defs>
         {edges.map((edge) => {
@@ -383,7 +470,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
                 key={anchor}
                 className={`idea-card__anchor idea-card__anchor--${anchor}`}
                 type="button"
-                hidden={tool === 'draw'}
+                hidden={tool !== 'select'}
                 data-card-id={card.id}
                 data-anchor-side={anchor}
                 aria-label={`从 ${card.title} 的${anchor === 'top' ? '上方' : anchor === 'right' ? '右侧' : anchor === 'bottom' ? '下方' : '左侧'}连接点创建连接`}
@@ -434,7 +521,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
         </>
       ) : null}
       {calibration.phase === 'roi' ? <div className={`calibration-target calibration-target--${calibration.roiStep}`} aria-hidden="true">{calibration.roiStep + 1}</div> : null}
-      <div className="canvas-stage__notice"><p className="eyebrow">P1 STYLE-01 · P0 SAFE</p><h2 id="canvas-title">{tool === 'draw' ? (inputMode === 'mouse' ? '鼠标画笔已启用' : '捏合落笔，松开断笔') : tool === 'select' ? '选择与整理卡片' : '从卡片锚点拖出连接'}</h2><p>笔迹、卡片与连接会在本地自动保存。实验视觉只改变显示，不改写原始 Stroke。</p>{tool === 'edge' ? <label className="edge-type-control">{selectedEdgeId ? '所选连接' : '新连接类型'}<select value={selectedEdgeId ? edges.find((edge) => edge.id === selectedEdgeId)?.type ?? props.edgeType : props.edgeType} onChange={(event) => { const type = event.target.value as Edge['type']; if (selectedEdgeId) props.onUpdateEdge(selectedEdgeId, type); else props.onEdgeTypeChange(type) }}><option value="undirected">无方向</option><option value="directed">有方向</option></select></label> : null}</div>
+      <div className="canvas-stage__notice"><p className="eyebrow">P1 STYLE-01 · P0 SAFE</p><h2 id="canvas-title">{tool === 'draw' ? (inputMode === 'mouse' ? '鼠标画笔已启用' : '捏合落笔，松开断笔') : tool === 'select' ? '选择卡片或从锚点连线' : tool === 'lasso-rect' ? '拖动矩形框选笔画' : '拖动自由套索选择笔画'}</h2><p>选区只显示生成建议，确认前不会创建卡片。实验视觉不改写原始 Stroke。</p>{tool === 'select' ? <label className="edge-type-control">{selectedEdgeId ? '所选连接' : '新连接类型'}<select value={selectedEdgeId ? edges.find((edge) => edge.id === selectedEdgeId)?.type ?? props.edgeType : props.edgeType} onChange={(event) => { const type = event.target.value as Edge['type']; if (selectedEdgeId) props.onUpdateEdge(selectedEdgeId, type); else props.onEdgeTypeChange(type) }}><option value="undirected">无方向</option><option value="directed">有方向</option></select></label> : null}</div>
       <div className="canvas-stage__coordinates" aria-hidden="true"><span>{inputMode.toUpperCase()}</span><span>{strokes.length} STROKES</span><span>{cards.length} CARDS / {edges.length} EDGES</span></div>
     </section>
   )

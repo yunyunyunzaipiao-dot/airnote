@@ -46,6 +46,7 @@ import {
   projectFromDocument,
   renameCard,
   resizeCard,
+  suggestGroupFromSelection,
   suggestCurrentGroup,
   touch,
   updateEdgeType,
@@ -741,6 +742,19 @@ export function useAirNoteRuntime() {
     applyDocument(cancelCurrentGroup(documentRef.current))
   }, [applyDocument])
 
+  const suggestSelectionGroup = useCallback((strokeIds: string[]) => {
+    const before = documentRef.current
+    const after = suggestGroupFromSelection(before, strokeIds)
+    if (after === before) {
+      setWorkspaceMessage('选区内没有可生成卡片的笔画。')
+      return false
+    }
+    if (groupTimerRef.current) clearTimeout(groupTimerRef.current)
+    applyDocument(after)
+    setWorkspaceMessage('已选中笔画。确认后才会生成想法卡片。')
+    return true
+  }, [applyDocument])
+
   const generateCard = useCallback(() => {
     const before = documentRef.current
     const after = createCardFromCurrentGroup(before)
@@ -976,6 +990,7 @@ export function useAirNoteRuntime() {
     setEdgeType,
     continueGroup,
     cancelGroup,
+    suggestSelectionGroup,
     generateCard,
     commitCardMove,
     commitCardResize,

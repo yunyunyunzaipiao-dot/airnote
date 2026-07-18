@@ -70,6 +70,28 @@ export function suggestCurrentGroup(document: WorkspaceDocument): WorkspaceDocum
   })
 }
 
+export function suggestGroupFromSelection(
+  document: WorkspaceDocument,
+  requestedStrokeIds: string[],
+): WorkspaceDocument {
+  const eligibleStrokeIds = [...new Set(requestedStrokeIds)].filter((strokeId) => {
+    const stroke = document.strokes.find((item) => item.id === strokeId)
+    return Boolean(stroke && !stroke.cardId)
+  })
+  const bounds = strokeBounds(document.strokes.filter((stroke) => eligibleStrokeIds.includes(stroke.id)))
+  if (!bounds || eligibleStrokeIds.length === 0) return document
+  const group: StrokeGroup = {
+    id: createId('group'),
+    strokeIds: eligibleStrokeIds,
+    boundingBox: bounds,
+    status: 'suggested',
+  }
+  return touch({
+    ...document,
+    groups: [...document.groups.filter((item) => item.status === 'committed'), group],
+  })
+}
+
 export function continueCurrentGroup(document: WorkspaceDocument): WorkspaceDocument {
   return {
     ...document,

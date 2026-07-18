@@ -3,7 +3,7 @@ import type { CanvasPoint } from './m0'
 export type InputMode = 'gesture' | 'mouse'
 export type BrushWidth = 2 | 4 | 8
 export type VisualStyle = 'ink' | 'glow' | 'particle'
-export type WorkspaceTool = 'draw' | 'select' | 'edge'
+export type WorkspaceTool = 'draw' | 'select' | 'lasso-rect' | 'lasso-free'
 
 export interface StrokePoint extends CanvasPoint {
   t: number

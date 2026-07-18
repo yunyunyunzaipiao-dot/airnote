@@ -76,18 +76,7 @@ export function PropertyPanel({
           >{experimentalStylesEnabled ? '关闭' : '启用'}</button>
         </div>
 
-        <label htmlFor="visual-style">视觉风格</label>
-        <select
-          id="visual-style"
-          value={experimentalStylesEnabled ? brush.style : 'ink'}
-          disabled={!experimentalStylesEnabled}
-          aria-label="视觉风格"
-          onChange={(event) => onChange({ ...brush, style: event.target.value as VisualStyle })}
-        >
-          <option value="ink">Ink</option>
-          <option value="glow">Glow</option>
-          <option value="particle">Particle</option>
-        </select>
+        <p className="style-status">画笔样式由上方画笔图标选择；辉光与粒子需先开启实验功能。</p>
         {reducedMotion ? <p className="style-status">系统已启用减少动态效果：已关闭动态衰减，保留静态粒子轮廓。</p> : null}
         {performanceStage !== 'full' ? <p className="style-status" role="status">性能模式已开启：{performanceStage === 'reduced-particles' ? '已减少粒子数量。' : '已关闭拖尾。'}</p> : null}
       </fieldset>

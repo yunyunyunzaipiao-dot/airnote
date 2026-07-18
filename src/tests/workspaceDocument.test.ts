@@ -10,6 +10,7 @@ import {
   moveCard,
   renameCard,
   resizeCard,
+  suggestGroupFromSelection,
   suggestCurrentGroup,
   updateEdgeType,
 } from '../store/workspaceDocument'
@@ -31,6 +32,19 @@ describe('M2 workspace document', () => {
     expect(carded.cards[0].title).toBe('未命名想法')
     expect(carded.strokes[0].points).toEqual(original.points)
     expect(carded.strokes[0].cardId).toBe(carded.cards[0].id)
+  })
+
+  it('turns selected uncarded strokes into a confirmation suggestion', () => {
+    const first = stroke('s1')
+    const second = stroke('s2', 100)
+    const document = {
+      ...createWorkspaceDocument(0),
+      strokes: [first, { ...second, cardId: 'card-existing' }],
+    }
+    const suggested = suggestGroupFromSelection(document, ['s1', 's2', 'missing'])
+    expect(suggested.groups).toHaveLength(1)
+    expect(suggested.groups[0]).toMatchObject({ strokeIds: ['s1'], status: 'suggested' })
+    expect(suggested.strokes[0].points).toEqual(first.points)
   })
 
   it('moves cards within the 24px visible boundary and caps titles', () => {

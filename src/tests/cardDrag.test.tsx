@@ -48,6 +48,7 @@ describe('CARD-02 card drag preview', () => {
         onPointerStart={vi.fn()}
         onPointerMove={vi.fn()}
         onPointerEnd={vi.fn()}
+        onSuggestSelection={vi.fn(() => true)}
         onGenerateCard={vi.fn()}
         onContinueGroup={vi.fn()}
         onCancelGroup={vi.fn()}

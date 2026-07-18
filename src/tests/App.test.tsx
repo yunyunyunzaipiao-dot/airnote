@@ -194,27 +194,57 @@ describe('AirNote M1 workspace', () => {
     }
   })
 
-  it('makes the 03 card entry actionable without bypassing card confirmation', () => {
-    vi.useFakeTimers()
-    try {
-      render(<App />)
-      const cardEntry = screen.getByRole('button', { name: '03 卡片' })
-      expect(cardEntry).toBeEnabled()
+  it('uses icon tools without separate card or edge buttons', () => {
+    render(<App />)
+    expect(screen.getByRole('button', { name: '选择卡片' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '选择笔画区域' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '画笔' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '03 卡片' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '04 连线' })).not.toBeInTheDocument()
 
-      fireEvent.click(cardEntry)
-      const workspaceStatus = screen.getByRole('status')
-      expect(workspaceStatus).toHaveTextContent('请先用画笔完成一组笔画')
-      expect(workspaceStatus.closest('aside')).toHaveClass('context-rail--input')
-      expect(screen.queryByText('未命名想法')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '选择笔画区域' }))
+    expect(screen.getByRole('menuitem', { name: '矩形框选笔画' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: '自由套索笔画' })).toBeInTheDocument()
 
-      drawMouseStroke()
-      act(() => vi.advanceTimersByTime(1200))
-      fireEvent.click(cardEntry)
-      expect(screen.getByRole('textbox', { name: '卡片文字注释' })).toHaveValue('')
-      expect(screen.getByText('1 CARDS / 0 EDGES')).toBeInTheDocument()
-    } finally {
-      vi.useRealTimers()
-    }
+    fireEvent.click(screen.getByRole('button', { name: '画笔' }))
+    expect(screen.getByRole('menuitem', { name: '墨迹画笔' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: '辉光画笔（请先开启实验功能）' })).toBeDisabled()
+    expect(screen.getByRole('menuitem', { name: '粒子画笔（请先开启实验功能）' })).toBeDisabled()
+  })
+
+  it('turns a rectangle selection into a card suggestion that still needs confirmation', () => {
+    render(<App />)
+    drawMouseStroke()
+    fireEvent.click(screen.getByRole('button', { name: '选择笔画区域' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '矩形框选笔画' }))
+
+    const canvas = screen.getByLabelText('鼠标绘图画布')
+    fireEvent.pointerDown(canvas, { pointerId: 2, button: 0, clientX: 0, clientY: 0 })
+    fireEvent.pointerMove(canvas, { pointerId: 2, clientX: 60, clientY: 60 })
+    expect(screen.queryByText('未命名想法')).not.toBeInTheDocument()
+    fireEvent.pointerUp(canvas, { pointerId: 2, clientX: 60, clientY: 60 })
+
+    expect(screen.getByRole('button', { name: '生成想法卡片' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('确认后才会生成想法卡片')
+    fireEvent.click(screen.getByRole('button', { name: '生成想法卡片' }))
+    expect(screen.getByText('1 CARDS / 0 EDGES')).toBeInTheDocument()
+  })
+
+  it('supports a freeform lasso without creating a card automatically', () => {
+    render(<App />)
+    drawMouseStroke()
+    fireEvent.click(screen.getByRole('button', { name: '选择笔画区域' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '自由套索笔画' }))
+
+    const canvas = screen.getByLabelText('鼠标绘图画布')
+    fireEvent.pointerDown(canvas, { pointerId: 3, button: 0, clientX: 0, clientY: 0 })
+    fireEvent.pointerMove(canvas, { pointerId: 3, clientX: 60, clientY: 0 })
+    fireEvent.pointerMove(canvas, { pointerId: 3, clientX: 60, clientY: 60 })
+    fireEvent.pointerMove(canvas, { pointerId: 3, clientX: 0, clientY: 60 })
+    fireEvent.pointerUp(canvas, { pointerId: 3, clientX: 0, clientY: 0 })
+
+    expect(screen.getByRole('button', { name: '生成想法卡片' })).toBeInTheDocument()
+    expect(screen.queryByText('未命名想法')).not.toBeInTheDocument()
   })
 
   it('accepts keyboard text immediately after a card is generated', () => {
@@ -354,19 +384,15 @@ describe('AirNote M1 workspace', () => {
 
   it('keeps experimental visual styles behind an explicit switch', () => {
     render(<App />)
-    const styleSelect = screen.getByRole('combobox', { name: '视觉风格' })
-    expect(styleSelect).toBeDisabled()
-    expect(styleSelect).toHaveValue('ink')
+    fireEvent.click(screen.getByRole('button', { name: '画笔' }))
+    expect(screen.getByRole('menuitem', { name: '辉光画笔（请先开启实验功能）' })).toBeDisabled()
 
     fireEvent.click(screen.getByRole('button', { name: '启用' }))
-    fireEvent.change(styleSelect, { target: { value: 'glow' } })
-    expect(styleSelect).toHaveValue('glow')
+    fireEvent.click(screen.getByRole('menuitem', { name: '辉光画笔' }))
     expect(JSON.parse(localStorage.getItem('airnote.settings.current')!).experimentalStylesEnabled).toBe(true)
     expect(JSON.parse(localStorage.getItem('airnote.settings.current')!).brush.style).toBe('glow')
 
     fireEvent.click(screen.getByRole('button', { name: '关闭' }))
-    expect(styleSelect).toBeDisabled()
-    expect(styleSelect).toHaveValue('ink')
     expect(JSON.parse(localStorage.getItem('airnote.settings.current')!).brush.style).toBe('ink')
   })
 
@@ -375,7 +401,8 @@ describe('AirNote M1 workspace', () => {
     try {
       const { container } = render(<App />)
       fireEvent.click(screen.getByRole('button', { name: '启用' }))
-      fireEvent.change(screen.getByRole('combobox', { name: '视觉风格' }), { target: { value: 'particle' } })
+      fireEvent.click(screen.getByRole('button', { name: '画笔' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: '粒子画笔' }))
       drawMouseStroke()
       act(() => vi.advanceTimersByTime(1200))
       fireEvent.click(screen.getByRole('button', { name: '生成想法卡片' }))
@@ -406,9 +433,8 @@ describe('AirNote M1 workspace', () => {
 
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: '启用' }))
-    fireEvent.change(screen.getByRole('combobox', { name: '视觉风格' }), {
-      target: { value: 'particle' },
-    })
+    fireEvent.click(screen.getByRole('button', { name: '画笔' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '粒子画笔' }))
     fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
     await screen.findByRole('button', { name: '关闭摄像头' })
     fireEvent.click(screen.getByRole('button', { name: '开始校准' }))

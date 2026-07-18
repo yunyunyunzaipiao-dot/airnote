@@ -46,23 +46,6 @@ export function App() {
     runtime.replaceProject(result.project)
   }
 
-  const handleCardAction = () => {
-    if (runtime.currentGroup?.status === 'suggested') {
-      runtime.generateCard()
-      return
-    }
-    if (runtime.document.cards.length > 0) {
-      runtime.setTool('select')
-      runtime.reportWorkspaceMessage('已进入卡片整理模式。可拖动、改名、调整大小或删除卡片。')
-      return
-    }
-    runtime.reportWorkspaceMessage(
-      runtime.currentGroup
-        ? '当前笔画组仍在收集，请停笔片刻，出现生成建议后再点击“卡片”。'
-        : '请先用画笔完成一组笔画，出现生成建议后再点击“卡片”。',
-    )
-  }
-
   return (
     <main className="app-shell">
       {!pointerEventsSupported ? (
@@ -113,7 +96,13 @@ export function App() {
           ) : null}
         </aside>
         <div className="workspace-primary">
-          <LeftToolbar tool={runtime.tool} onChange={runtime.setTool} onCardAction={handleCardAction} />
+          <LeftToolbar
+            tool={runtime.tool}
+            brushStyle={runtime.settings.brush.style}
+            experimentalStylesEnabled={runtime.settings.experimentalStylesEnabled}
+            onChange={runtime.setTool}
+            onBrushStyleChange={(style) => runtime.updateBrush({ ...runtime.settings.brush, style })}
+          />
           <WorkspaceCanvas
             inputMode={runtime.settings.inputMode}
             experimentalStylesEnabled={runtime.settings.experimentalStylesEnabled}
@@ -129,6 +118,7 @@ export function App() {
             onPointerStart={runtime.startMouseStroke}
             onPointerMove={runtime.appendMousePoint}
             onPointerEnd={runtime.endMouseStroke}
+            onSuggestSelection={runtime.suggestSelectionGroup}
             onGenerateCard={runtime.generateCard}
             onContinueGroup={runtime.continueGroup}
             onCancelGroup={runtime.cancelGroup}
