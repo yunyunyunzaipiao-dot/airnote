@@ -15,6 +15,12 @@ import {
   stopCameraStream,
 } from '../camera/camera'
 import { StrokeCanvasRenderer, type StylePerformanceStage } from '../drawing/canvasRenderer'
+import type { CardGeometry } from '../layout/cardResize'
+import {
+  createOpenPalmHold,
+  isOpenPalm,
+  stepOpenPalmHold,
+} from '../gesture/openPalmPause'
 import { calculatePinchRatio, createGestureMachine, stepGestureMachine, stopGestureMachine } from '../gesture/pinchStateMachine'
 import {
   createWorkspaceHistory,
@@ -25,6 +31,7 @@ import {
 } from '../history/workspaceHistory'
 import { createHandTracker, type HandTracker } from '../handTracking/handTracker'
 import { startVideoFrameLoop, type VideoFrameLoop } from '../handTracking/videoFrameLoop'
+import { loadGesturePauseEnabled, saveGesturePauseEnabled } from '../persistence/gesturePauseStorage'
 import { loadSettings, saveSettings } from '../persistence/settingsStorage'
 import { loadWorkspace, saveWorkspace, type SaveStatus } from '../persistence/workspaceStorage'
 import {
@@ -73,6 +80,7 @@ const EMPTY_DIAGNOSTICS: RuntimeDiagnostics = {
   pinchRatio: null,
   lostFrames: 0,
   gestureState: 'IDLE',
+  openPalmHoldProgress: 0,
 }
 
 const INITIAL_UI_STATE: M0UiState = {
@@ -120,6 +128,7 @@ export function useAirNoteRuntime() {
   const [edgeType, setEdgeType] = useState<Edge['type']>('undirected')
   const [stylePerformanceStage, setStylePerformanceStage] = useState<StylePerformanceStage>('full')
   const [reducedMotion, setReducedMotion] = useState(false)
+  const [gesturePauseEnabled, setGesturePauseEnabledState] = useState(loadGesturePauseEnabled)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -127,6 +136,8 @@ export function useAirNoteRuntime() {
   const loopRef = useRef<VideoFrameLoop | null>(null)
   const rendererRef = useRef(new StrokeCanvasRenderer())
   const machineRef = useRef(createGestureMachine())
+  const openPalmHoldRef = useRef(createOpenPalmHold())
+  const gesturePauseEnabledRef = useRef(gesturePauseEnabled)
   const settingsRef = useRef(settings)
   const documentRef = useRef(documentState)
   const historyRef = useRef(history)
@@ -206,6 +217,7 @@ export function useAirNoteRuntime() {
       pinchRatio: machineRef.current.pinchRatio,
       lostFrames: machineRef.current.lostFrames,
       gestureState: machineRef.current.state,
+      openPalmHoldProgress: openPalmHoldRef.current.progress,
     }
 
     if (now - lastHudUpdateAtRef.current >= 125) {
@@ -218,9 +230,13 @@ export function useAirNoteRuntime() {
   const endGestureTrajectory = useCallback(() => {
     const result = stopGestureMachine(machineRef.current)
     machineRef.current = result.machine
+    openPalmHoldRef.current = createOpenPalmHold()
     result.commands.forEach((command) => {
       const stroke = rendererRef.current.handleGesture(command)
-      if (calibrationRef.current.phase === 'ready') commitStroke(stroke)
+      if (
+        calibrationRef.current.phase === 'ready'
+        || calibrationRef.current.phase === 'review'
+      ) commitStroke(stroke)
     })
   }, [commitStroke])
 
@@ -250,18 +266,59 @@ export function useAirNoteRuntime() {
           settingsRef.current.inputMode === 'gesture'
           && (calibrationPhase === 'ready' || calibrationPhase === 'review')
         ) {
-          const result = stepGestureMachine(
-            machineRef.current,
-            frame,
-            settingsRef.current.gesture.pinchDownThreshold,
-            settingsRef.current.gesture.pinchUpThreshold,
-          )
-          machineRef.current = result.machine
-          result.commands.forEach((command) => {
-            const stroke = rendererRef.current.handleGesture(command)
-            if (calibrationPhase === 'ready') commitStroke(stroke)
-          })
+          if (machineRef.current.state === 'PAUSED') {
+            const holdResult = stepOpenPalmHold(
+              openPalmHoldRef.current,
+              frame.timestamp,
+              isOpenPalm(landmarks),
+              gesturePauseEnabledRef.current && calibrationPhase === 'ready',
+            )
+            openPalmHoldRef.current = holdResult.hold
+            if (holdResult.completed) {
+              machineRef.current = {
+                ...createGestureMachine(),
+                state: landmarks ? 'HOVER' : 'IDLE',
+                lastFrameAt: frame.timestamp,
+                pinchRatio,
+              }
+              setWorkspaceMessage('手势输入已恢复，从悬停状态重新开始。')
+            }
+          } else {
+            const result = stepGestureMachine(
+              machineRef.current,
+              frame,
+              settingsRef.current.gesture.pinchDownThreshold,
+              settingsRef.current.gesture.pinchUpThreshold,
+            )
+            machineRef.current = result.machine
+            result.commands.forEach((command) => {
+              const stroke = rendererRef.current.handleGesture(command)
+              if (calibrationPhase === 'ready' || calibrationPhase === 'review') {
+                commitStroke(stroke)
+              }
+            })
+
+            const holdResult = stepOpenPalmHold(
+              openPalmHoldRef.current,
+              frame.timestamp,
+              isOpenPalm(landmarks),
+              gesturePauseEnabledRef.current
+                && calibrationPhase === 'ready'
+                && machineRef.current.state === 'HOVER',
+            )
+            openPalmHoldRef.current = holdResult.hold
+            if (holdResult.completed) {
+              machineRef.current = {
+                ...machineRef.current,
+                state: 'PAUSED',
+                downFrames: 0,
+                upFrames: 0,
+              }
+              setWorkspaceMessage('手势输入已暂停。再次张掌保持 0.8 秒，或点击“恢复手势”。')
+            }
+          }
         } else {
+          openPalmHoldRef.current = createOpenPalmHold()
           machineRef.current = {
             ...createGestureMachine(),
             state: landmarks ? 'HOVER' : 'IDLE',
@@ -298,6 +355,7 @@ export function useAirNoteRuntime() {
     stopCameraStream(streamRef.current)
     streamRef.current = null
     latestHandRef.current = null
+    openPalmHoldRef.current = createOpenPalmHold()
     if (videoRef.current) videoRef.current.srcObject = null
 
     if (publishStoppedState && mountedRef.current) {
@@ -391,6 +449,7 @@ export function useAirNoteRuntime() {
     }
 
     machineRef.current = createGestureMachine()
+    openPalmHoldRef.current = createOpenPalmHold()
     frameCountRef.current = 0
     fpsWindowStartedAtRef.current = 0
     const hasCalibration = settingsRef.current.gesture.calibrated
@@ -416,6 +475,56 @@ export function useAirNoteRuntime() {
     if (inputMode === 'gesture' && uiState.cameraStatus !== 'running') return
     publishSettings({ ...settingsRef.current, inputMode })
   }, [endGestureTrajectory, finishRendererStroke, publishSettings, uiState.cameraStatus])
+
+  const resumeGestureInput = useCallback(() => {
+    if (machineRef.current.state !== 'PAUSED') return
+    openPalmHoldRef.current = createOpenPalmHold()
+    machineRef.current = {
+      ...createGestureMachine(),
+      state: latestHandRef.current ? 'HOVER' : 'IDLE',
+      pinchRatio: latestHandRef.current?.pinchRatio ?? null,
+    }
+    setUiState((current) => ({
+      ...current,
+      diagnostics: {
+        ...current.diagnostics,
+        gestureState: machineRef.current.state,
+        pinchRatio: machineRef.current.pinchRatio,
+        openPalmHoldProgress: 0,
+      },
+    }))
+    setWorkspaceMessage('手势输入已恢复，从悬停状态重新开始。')
+  }, [])
+
+  const setGesturePauseEnabled = useCallback((enabled: boolean) => {
+    gesturePauseEnabledRef.current = enabled
+    setGesturePauseEnabledState(enabled)
+    openPalmHoldRef.current = createOpenPalmHold()
+    try {
+      saveGesturePauseEnabled(enabled)
+    } catch {
+      setWorkspaceMessage('张掌暂停开关未能保存，但本次仍可使用。')
+    }
+    if (!enabled && machineRef.current.state === 'PAUSED') {
+      machineRef.current = {
+        ...createGestureMachine(),
+        state: latestHandRef.current ? 'HOVER' : 'IDLE',
+        pinchRatio: latestHandRef.current?.pinchRatio ?? null,
+      }
+    }
+    setUiState((current) => ({
+      ...current,
+      diagnostics: {
+        ...current.diagnostics,
+        gestureState: machineRef.current.state,
+        pinchRatio: machineRef.current.pinchRatio,
+        openPalmHoldProgress: 0,
+      },
+    }))
+    setWorkspaceMessage(enabled
+      ? '张掌暂停已启用：张开手掌保持 0.8 秒可暂停或恢复。'
+      : '张掌暂停已关闭，鼠标与基础手势不受影响。')
+  }, [])
 
   const attachCanvas = useCallback((canvas: HTMLCanvasElement, cursor: HTMLElement) => {
     finishRendererStroke()
@@ -654,12 +763,21 @@ export function useAirNoteRuntime() {
     publishHistory(pushHistory(historyRef.current, { type: 'MOVE_CARD', before, after }))
   }, [applyDocument, publishHistory])
 
-  const commitCardResize = useCallback((cardId: string, width: number, height: number, stage: { width: number; height: number }) => {
+  const commitCardResize = useCallback((cardId: string, geometry: CardGeometry, stage: { width: number; height: number }) => {
     const before = documentRef.current
-    const after = resizeCard(before, cardId, width, height, stage)
+    const after = resizeCard(before, cardId, geometry, stage)
     const oldCard = before.cards.find((card) => card.id === cardId)
     const newCard = after.cards.find((card) => card.id === cardId)
-    if (!oldCard || !newCard || (oldCard.size.width === newCard.size.width && oldCard.size.height === newCard.size.height)) return
+    if (
+      !oldCard
+      || !newCard
+      || (
+        oldCard.position.x === newCard.position.x
+        && oldCard.position.y === newCard.position.y
+        && oldCard.size.width === newCard.size.width
+        && oldCard.size.height === newCard.size.height
+      )
+    ) return
     applyDocument(after)
     publishHistory(pushHistory(historyRef.current, { type: 'RESIZE_CARD', before, after }))
   }, [applyDocument, publishHistory])
@@ -828,6 +946,7 @@ export function useAirNoteRuntime() {
     edgeType,
     stylePerformanceStage,
     reducedMotion,
+    gesturePauseEnabled,
     saveStatus,
     calibration,
     workspaceMessage,
@@ -844,6 +963,8 @@ export function useAirNoteRuntime() {
     endMouseStroke,
     updateBrush,
     setExperimentalStylesEnabled,
+    setGesturePauseEnabled,
+    resumeGestureInput,
     undo,
     redo,
     clearWorkspace,

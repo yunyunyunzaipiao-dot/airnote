@@ -97,7 +97,17 @@ export function App() {
             onGestureRequest={runtime.requestGestureMode}
             onUseDefaultCalibration={runtime.skipCalibration}
           />
-          <GestureStatus diagnostics={runtime.uiState.diagnostics} />
+          <GestureStatus
+            diagnostics={runtime.uiState.diagnostics}
+            pauseEnabled={runtime.gesturePauseEnabled}
+            gestureModeActive={
+              runtime.settings.inputMode === 'gesture'
+              && runtime.uiState.cameraStatus === 'running'
+              && runtime.calibration.phase === 'ready'
+            }
+            onPauseEnabledChange={runtime.setGesturePauseEnabled}
+            onResume={runtime.resumeGestureInput}
+          />
           {runtime.workspaceMessage ? (
             <p className="workspace-toast" role="status">{runtime.workspaceMessage}</p>
           ) : null}

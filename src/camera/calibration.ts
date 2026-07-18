@@ -4,6 +4,8 @@ import { DEFAULT_SETTINGS, type GestureSettings, type WritingROI } from '../type
 export const ROI_TARGETS = ['左上', '右上', '右下', '左下'] as const
 const SAFETY_MARGIN_RATIO = 0.08
 const MIN_ROI_SIZE = 0.25
+const PINCH_CONTACT_MARGIN = 0.08
+const MAX_PINCH_DOWN_THRESHOLD = 0.45
 
 export interface PinchCycle {
   pinch: number
@@ -62,7 +64,13 @@ export function calculatePinchThresholds(cycles: PinchCycle[]) {
   const release = median(cycles.map((cycle) => cycle.release))
   if (release - pinch < 0.08) return null
 
-  const down = Math.min(0.45, Math.max(0.15, pinch * 1.1))
+  // Landmark tips still retain a small model-dependent gap when fingers touch.
+  // Keep calibration at least as permissive as the validated default so a
+  // threshold captured with one hand remains usable after switching hands.
+  const down = Math.min(
+    MAX_PINCH_DOWN_THRESHOLD,
+    Math.max(DEFAULT_SETTINGS.gesture.pinchDownThreshold, pinch + PINCH_CONTACT_MARGIN),
+  )
   const up = Math.min(0.8, Math.max(down + 0.06, release * 0.9))
   return down < up ? { down, up } : null
 }

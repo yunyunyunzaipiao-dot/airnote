@@ -1,6 +1,13 @@
-import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { cardInkMetrics } from '../drawing/cardInk'
 import { particleSamplesForStroke } from '../drawing/particleStyle'
+import {
+  adaptiveResizeHandlePosition,
+  resizeCardFromHandle,
+  type CardGeometry,
+  type CardResizeHandle,
+} from '../layout/cardResize'
+import { placeGroupSuggestionActions } from '../layout/groupSuggestionPlacement'
 import { automaticEdgeAnchors, cardAnchorPoint, closestCardAnchor, MIN_CARD_SIZE } from '../store/workspaceDocument'
 import type { CalibrationUiState } from '../store/useAirNoteRuntime'
 import type { Edge, EdgeAnchor, IdeaCard, InputMode, Stroke, StrokeGroup, WorkspaceTool } from '../types/workspace'
@@ -24,7 +31,7 @@ interface WorkspaceCanvasProps {
   onContinueGroup: () => void
   onCancelGroup: () => void
   onMoveCard: (cardId: string, x: number, y: number, stage: { width: number; height: number }) => void
-  onResizeCard: (cardId: string, width: number, height: number, stage: { width: number; height: number }) => void
+  onResizeCard: (cardId: string, geometry: CardGeometry, stage: { width: number; height: number }) => void
   onRenameCard: (cardId: string, title: string) => void
   onDeleteCard: (cardId: string) => void
   onCreateEdge: (sourceCardId: string, targetCardId: string, sourceAnchor: EdgeAnchor, targetAnchor: EdgeAnchor) => boolean
@@ -37,6 +44,15 @@ function canvasPoint(event: PointerEvent<HTMLCanvasElement>) {
   return { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
 }
 
+interface CardDragPreview {
+  cardId: string
+  pointerId: number
+  startX: number
+  startY: number
+  x: number
+  y: number
+}
+
 export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
   const { inputMode, tool, strokes, cards, edges, currentGroup, calibration } = props
   const stageRef = useRef<HTMLElement>(null)
@@ -44,27 +60,85 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
   const cursorRef = useRef<HTMLDivElement>(null)
   const [editingCardId, setEditingCardId] = useState<string | null>(null)
   const [draftTitle, setDraftTitle] = useState('')
-  const [drag, setDrag] = useState<{ cardId: string; pointerId: number; startX: number; startY: number; x: number; y: number } | null>(null)
-  const [resize, setResize] = useState<{ cardId: string; pointerId: number; startX: number; startY: number; width: number; height: number } | null>(null)
+  const knownCardIdsRef = useRef(new Set(cards.map((card) => card.id)))
+  const [drag, setDrag] = useState<CardDragPreview | null>(null)
+  const dragRef = useRef<CardDragPreview | null>(null)
+  const dragFrameRef = useRef<number | null>(null)
+  const [resize, setResize] = useState<{
+    cardId: string
+    pointerId: number
+    handle: CardResizeHandle
+    startPointer: { x: number; y: number }
+    startGeometry: CardGeometry
+    geometry: CardGeometry
+  } | null>(null)
   const [edgeDraft, setEdgeDraft] = useState<{ sourceCardId: string; sourceAnchor: EdgeAnchor; x: number; y: number; targetCardId: string | null; targetAnchor: EdgeAnchor | null } | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const [stageSize, setStageSize] = useState({ width: 0, height: 0 })
 
   useEffect(() => {
     const stage = stageRef.current
     const canvas = canvasRef.current
     const cursor = cursorRef.current
     if (!stage || !canvas || !cursor) return
-    const resize = () => props.onReady(canvas, cursor)
+    const resize = () => {
+      props.onReady(canvas, cursor)
+      setStageSize((current) => {
+        const next = { width: stage.clientWidth, height: stage.clientHeight }
+        return current.width === next.width && current.height === next.height ? current : next
+      })
+    }
     resize()
     const observer = new ResizeObserver(resize)
     observer.observe(stage)
     return () => observer.disconnect()
   }, [props.onReady])
 
+  useEffect(() => () => {
+    if (dragFrameRef.current === null) return
+    if (typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(dragFrameRef.current)
+    } else {
+      window.clearTimeout(dragFrameRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    const knownCardIds = knownCardIdsRef.current
+    const createdCard = cards.find((card) => !knownCardIds.has(card.id))
+    knownCardIdsRef.current = new Set(cards.map((card) => card.id))
+    if (!createdCard || createdCard.title !== '未命名想法') return
+    setEditingCardId(createdCard.id)
+    setDraftTitle('')
+  }, [cards])
+
+  const cardVisuals = useMemo(() => {
+    const strokesById = new Map(strokes.map((stroke) => [stroke.id, stroke]))
+    return new Map(cards.map((card) => {
+      const cardStrokes = card.strokeIds
+        .map((strokeId) => strokesById.get(strokeId))
+        .filter((stroke): stroke is Stroke => Boolean(stroke))
+      const particleSamples = new Map(
+        cardStrokes
+          .filter((stroke) => props.experimentalStylesEnabled && stroke.style === 'particle')
+          .map((stroke) => [stroke.id, particleSamplesForStroke(stroke)]),
+      )
+      return [card.id, {
+        cardStrokes,
+        ink: cardInkMetrics(cardStrokes),
+        particleSamples,
+      }]
+    }))
+  }, [cards, props.experimentalStylesEnabled, strokes])
+
   const cardPreview = (card: IdeaCard): IdeaCard => ({
     ...card,
-    position: drag?.cardId === card.id ? { x: drag.x, y: drag.y } : card.position,
-    size: resize?.cardId === card.id ? { width: resize.width, height: resize.height } : card.size,
+    position: resize?.cardId === card.id
+      ? resize.geometry.position
+      : drag?.cardId === card.id
+        ? { x: drag.x, y: drag.y }
+        : card.position,
+    size: resize?.cardId === card.id ? resize.geometry.size : card.size,
   })
 
   const finishTitle = (cardId: string, submit: boolean) => {
@@ -72,50 +146,108 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     setEditingCardId(null)
   }
 
+  const beginTitleEdit = (card: IdeaCard) => {
+    setEditingCardId(card.id)
+    setDraftTitle(card.title === '未命名想法' ? '' : card.title)
+  }
+
   const beginCardDrag = (event: PointerEvent<HTMLDivElement>, card: IdeaCard) => {
     if (tool === 'draw' || editingCardId === card.id || event.button !== 0) return
     event.currentTarget.setPointerCapture(event.pointerId)
-    setDrag({ cardId: card.id, pointerId: event.pointerId, startX: event.clientX - card.position.x, startY: event.clientY - card.position.y, ...card.position })
+    const next = {
+      cardId: card.id,
+      pointerId: event.pointerId,
+      startX: event.clientX - card.position.x,
+      startY: event.clientY - card.position.y,
+      ...card.position,
+    }
+    dragRef.current = next
+    setDrag(next)
   }
 
   const moveCardPreview = (event: PointerEvent<HTMLDivElement>) => {
-    if (!drag || drag.pointerId !== event.pointerId) return
-    setDrag({ ...drag, x: event.clientX - drag.startX, y: event.clientY - drag.startY })
+    const current = dragRef.current
+    if (!current || current.pointerId !== event.pointerId) return
+    const next = {
+      ...current,
+      x: event.clientX - current.startX,
+      y: event.clientY - current.startY,
+    }
+    dragRef.current = next
+    if (dragFrameRef.current !== null) return
+    const requestFrame = typeof window.requestAnimationFrame === 'function'
+      ? window.requestAnimationFrame.bind(window)
+      : (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16)
+    dragFrameRef.current = requestFrame(() => {
+      dragFrameRef.current = null
+      setDrag(dragRef.current)
+    })
   }
 
   const finishCardDrag = (event: PointerEvent<HTMLDivElement>, cancelled: boolean) => {
-    if (!drag || drag.pointerId !== event.pointerId) return
-    if (!cancelled && stageRef.current) {
-      props.onMoveCard(drag.cardId, drag.x, drag.y, { width: stageRef.current.clientWidth, height: stageRef.current.clientHeight })
+    const current = dragRef.current
+    if (!current || current.pointerId !== event.pointerId) return
+    if (dragFrameRef.current !== null) {
+      if (typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(dragFrameRef.current)
+      } else {
+        window.clearTimeout(dragFrameRef.current)
+      }
+      dragFrameRef.current = null
     }
+    if (!cancelled && stageRef.current) {
+      props.onMoveCard(current.cardId, current.x, current.y, { width: stageRef.current.clientWidth, height: stageRef.current.clientHeight })
+    }
+    dragRef.current = null
     setDrag(null)
   }
 
-  const beginCardResize = (event: PointerEvent<HTMLButtonElement>, card: IdeaCard) => {
+  const beginCardResize = (
+    event: PointerEvent<HTMLButtonElement>,
+    card: IdeaCard,
+    handle: CardResizeHandle,
+  ) => {
     if (tool !== 'select' || event.button !== 0) return
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
-    setResize({ cardId: card.id, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, ...card.size })
+    const startGeometry = { position: card.position, size: card.size }
+    setResize({
+      cardId: card.id,
+      pointerId: event.pointerId,
+      handle,
+      startPointer: { x: event.clientX, y: event.clientY },
+      startGeometry,
+      geometry: startGeometry,
+    })
   }
 
   const moveCardResize = (event: PointerEvent<HTMLButtonElement>) => {
     if (!resize || resize.pointerId !== event.pointerId) return
-    const card = cards.find((item) => item.id === resize.cardId)
     const stage = stageRef.current
-    if (!card || !stage) return
-    const maxWidth = Math.max(MIN_CARD_SIZE.width, stage.clientWidth)
-    const maxHeight = Math.max(MIN_CARD_SIZE.height, stage.clientHeight)
+    if (!stage) return
     setResize({
       ...resize,
-      width: Math.min(maxWidth, Math.max(MIN_CARD_SIZE.width, card.size.width + event.clientX - resize.startX)),
-      height: Math.min(maxHeight, Math.max(MIN_CARD_SIZE.height, card.size.height + event.clientY - resize.startY)),
+      geometry: resizeCardFromHandle(
+        resize.startGeometry,
+        resize.handle,
+        {
+          x: event.clientX - resize.startPointer.x,
+          y: event.clientY - resize.startPointer.y,
+        },
+        { width: stage.clientWidth, height: stage.clientHeight },
+        MIN_CARD_SIZE,
+      ),
     })
   }
 
   const finishCardResize = (event: PointerEvent<HTMLButtonElement>, cancelled: boolean) => {
     if (!resize || resize.pointerId !== event.pointerId) return
     if (!cancelled && stageRef.current) {
-      props.onResizeCard(resize.cardId, resize.width, resize.height, { width: stageRef.current.clientWidth, height: stageRef.current.clientHeight })
+      props.onResizeCard(
+        resize.cardId,
+        resize.geometry,
+        { width: stageRef.current.clientWidth, height: stageRef.current.clientHeight },
+      )
     }
     setResize(null)
   }
@@ -150,6 +282,10 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     }
     setEdgeDraft(null)
   }
+
+  const groupActionPosition = currentGroup?.status === 'suggested'
+    ? placeGroupSuggestionActions(currentGroup.boundingBox, stageSize)
+    : null
 
   return (
     <section ref={stageRef} className={`canvas-stage canvas-stage--${inputMode}`} aria-labelledby="canvas-title">
@@ -187,19 +323,49 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
       <div ref={cursorRef} className="tracking-cursor" hidden aria-hidden="true" />
       {cards.map((card) => {
         const preview = cardPreview(card)
-        const cardStrokes = strokes.filter((stroke) => card.strokeIds.includes(stroke.id))
-        const ink = cardInkMetrics(cardStrokes)
+        const visual = cardVisuals.get(card.id)
+        const cardStrokes = visual?.cardStrokes ?? []
+        const ink = visual?.ink ?? null
         return (
           <article key={card.id} data-card-id={card.id} className={`idea-card ${edgeDraft?.targetCardId === card.id ? 'idea-card--edge-target' : ''}`} style={{ left: preview.position.x, top: preview.position.y, width: preview.size.width, height: preview.size.height }}>
-            <div className="idea-card__title" onPointerDown={(event) => beginCardDrag(event, card)} onPointerMove={moveCardPreview} onPointerUp={(event) => finishCardDrag(event, false)} onPointerCancel={(event) => finishCardDrag(event, true)} onDoubleClick={() => { setEditingCardId(card.id); setDraftTitle(card.title) }}>
-              {editingCardId === card.id ? <input autoFocus aria-label="卡片标题" maxLength={100} value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} onBlur={() => finishTitle(card.id, true)} onKeyDown={(event) => { if (event.key === 'Enter') finishTitle(card.id, true); if (event.key === 'Escape') finishTitle(card.id, false) }} /> : <strong>{card.title}</strong>}
-              <span>{editingCardId === card.id ? `${draftTitle.length}/100` : '双击改名'}</span>
+            <div className="idea-card__title" onPointerDown={(event) => beginCardDrag(event, card)} onPointerMove={moveCardPreview} onPointerUp={(event) => finishCardDrag(event, false)} onPointerCancel={(event) => finishCardDrag(event, true)} onDoubleClick={() => beginTitleEdit(card)}>
+              {editingCardId === card.id ? (
+                <>
+                  <input
+                    autoFocus
+                    aria-label="卡片文字注释"
+                    maxLength={100}
+                    placeholder="用键盘输入文字"
+                    value={draftTitle}
+                    onChange={(event) => setDraftTitle(event.target.value)}
+                    onBlur={() => finishTitle(card.id, true)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') finishTitle(card.id, true)
+                      if (event.key === 'Escape') finishTitle(card.id, false)
+                    }}
+                  />
+                  <span>{draftTitle.length}/100</span>
+                </>
+              ) : (
+                <>
+                  <strong>{card.title}</strong>
+                  <button
+                    className="idea-card__text-entry"
+                    type="button"
+                    aria-label={`键盘输入卡片文字注释：${card.title}`}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => beginTitleEdit(card)}
+                  >输入文字</button>
+                </>
+              )}
             </div>
             {ink ? (
               <svg className="idea-card__ink" viewBox={`0 0 ${ink.size.width} ${ink.size.height}`} preserveAspectRatio="xMidYMid meet">
                 {cardStrokes.map((stroke) => {
                   const style = props.experimentalStylesEnabled ? stroke.style : 'ink'
-                  const particleSamples = style === 'particle' ? particleSamplesForStroke(stroke) : []
+                  const particleSamples = style === 'particle'
+                    ? visual?.particleSamples.get(stroke.id) ?? []
+                    : []
                   return (
                     <g key={stroke.id} className={`card-stroke card-stroke--${style}`} style={{ color: stroke.color }}>
                       {style !== 'particle' ? <polyline points={stroke.points.map((point) => `${point.x - ink.origin.x},${point.y - ink.origin.y}`).join(' ')} fill="none" stroke={stroke.color} strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" /> : null}
@@ -227,20 +393,46 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
                 onPointerCancel={() => setEdgeDraft(null)}
               >●</button>
             ))}
-            <button
-              className="idea-card__resize"
-              type="button"
-              hidden={tool !== 'select'}
-              aria-label={`调整卡片 ${card.title} 大小`}
-              onPointerDown={(event) => beginCardResize(event, card)}
-              onPointerMove={moveCardResize}
-              onPointerUp={(event) => finishCardResize(event, false)}
-              onPointerCancel={(event) => finishCardResize(event, true)}
-            >↘</button>
+            {([
+              ['nw', '左上角', '↖'],
+              ['ne', '右上角', '↗'],
+              ['se', '右下角', '↘'],
+              ['sw', '左下角', '↙'],
+            ] as const).map(([handle, label, icon]) => (
+              <button
+                key={handle}
+                className={`idea-card__resize idea-card__resize--${handle}`}
+                style={adaptiveResizeHandlePosition(preview, handle, stageSize)}
+                type="button"
+                hidden={tool !== 'select'}
+                aria-label={`从${label}调整卡片 ${card.title} 大小`}
+                onPointerDown={(event) => beginCardResize(event, card, handle)}
+                onPointerMove={moveCardResize}
+                onPointerUp={(event) => finishCardResize(event, false)}
+                onPointerCancel={(event) => finishCardResize(event, true)}
+              >{icon}</button>
+            ))}
           </article>
         )
       })}
-      {currentGroup?.status === 'suggested' ? <div className="group-suggestion" style={{ left: currentGroup.boundingBox.x - 12, top: currentGroup.boundingBox.y - 12, width: currentGroup.boundingBox.width + 24, height: currentGroup.boundingBox.height + 24 }}><div><button type="button" onClick={props.onGenerateCard}>生成想法卡片</button><button type="button" onClick={props.onContinueGroup}>继续添加</button><button type="button" onClick={props.onCancelGroup}>取消分组</button></div></div> : null}
+      {currentGroup?.status === 'suggested' ? (
+        <>
+          <div
+            className="group-suggestion"
+            style={{
+              left: currentGroup.boundingBox.x - 12,
+              top: currentGroup.boundingBox.y - 12,
+              width: currentGroup.boundingBox.width + 24,
+              height: currentGroup.boundingBox.height + 24,
+            }}
+          />
+          <div className="group-suggestion-actions" style={groupActionPosition ?? undefined}>
+            <button type="button" onClick={props.onGenerateCard}>生成想法卡片</button>
+            <button type="button" onClick={props.onContinueGroup}>继续添加</button>
+            <button type="button" onClick={props.onCancelGroup}>取消分组</button>
+          </div>
+        </>
+      ) : null}
       {calibration.phase === 'roi' ? <div className={`calibration-target calibration-target--${calibration.roiStep}`} aria-hidden="true">{calibration.roiStep + 1}</div> : null}
       <div className="canvas-stage__notice"><p className="eyebrow">P1 STYLE-01 · P0 SAFE</p><h2 id="canvas-title">{tool === 'draw' ? (inputMode === 'mouse' ? '鼠标画笔已启用' : '捏合落笔，松开断笔') : tool === 'select' ? '选择与整理卡片' : '从卡片锚点拖出连接'}</h2><p>笔迹、卡片与连接会在本地自动保存。实验视觉只改变显示，不改写原始 Stroke。</p>{tool === 'edge' ? <label className="edge-type-control">{selectedEdgeId ? '所选连接' : '新连接类型'}<select value={selectedEdgeId ? edges.find((edge) => edge.id === selectedEdgeId)?.type ?? props.edgeType : props.edgeType} onChange={(event) => { const type = event.target.value as Edge['type']; if (selectedEdgeId) props.onUpdateEdge(selectedEdgeId, type); else props.onEdgeTypeChange(type) }}><option value="undirected">无方向</option><option value="directed">有方向</option></select></label> : null}</div>
       <div className="canvas-stage__coordinates" aria-hidden="true"><span>{inputMode.toUpperCase()}</span><span>{strokes.length} STROKES</span><span>{cards.length} CARDS / {edges.length} EDGES</span></div>

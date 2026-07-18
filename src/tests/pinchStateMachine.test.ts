@@ -42,6 +42,15 @@ describe('pinch state machine', () => {
     expect(result.commands).toContainEqual(expect.objectContaining({ type: 'START_STROKE' }))
   })
 
+  it('keeps an older over-strict calibration at least as permissive as the default', () => {
+    let result = stepGestureMachine(createGestureMachine(), frame(0, 0.7), 0.18, 0.42)
+    result = stepGestureMachine(result.machine, frame(16, 0.34), 0.18, 0.42)
+    result = stepGestureMachine(result.machine, frame(32, 0.34), 0.18, 0.42)
+
+    expect(result.machine.state).toBe('DRAWING')
+    expect(result.commands).toContainEqual(expect.objectContaining({ type: 'START_STROKE' }))
+  })
+
   it('requires two consecutive release frames before ending a slow stroke', () => {
     let result = stepGestureMachine(enterDrawing(), frame(48, 0.43))
     expect(result.machine.state).toBe('DRAWING')

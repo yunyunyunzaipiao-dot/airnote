@@ -48,6 +48,39 @@ function handFrame(timestamp: number, ratio: number, indexX = 0.5): HandFrame {
   return { landmarks, timestamp, inferenceMs: 5 }
 }
 
+function calibrationFrame(
+  timestamp: number,
+  ratio: number,
+  indexX: number,
+  indexY: number,
+): HandFrame {
+  const frame = handFrame(timestamp, ratio, indexX)
+  frame.landmarks![8] = { x: indexX, y: indexY }
+  frame.landmarks![4] = { x: indexX + ratio, y: indexY }
+  return frame
+}
+
+function openPalmFrame(timestamp: number): HandFrame {
+  const landmarks: NormalizedPoint[] = Array.from(
+    { length: 21 },
+    () => ({ x: 0.5, y: 0.7, z: 0 }),
+  )
+  landmarks[0] = { x: 0.5, y: 0.9 }
+  landmarks[3] = { x: 0.35, y: 0.75 }
+  landmarks[4] = { x: 0.2, y: 0.65 }
+  landmarks[5] = { x: 0.42, y: 0.65 }
+  landmarks[6] = { x: 0.4, y: 0.5 }
+  landmarks[8] = { x: 0.38, y: 0.2 }
+  landmarks[10] = { x: 0.48, y: 0.48 }
+  landmarks[12] = { x: 0.48, y: 0.14 }
+  landmarks[14] = { x: 0.56, y: 0.5 }
+  landmarks[16] = { x: 0.58, y: 0.2 }
+  landmarks[17] = { x: 0.62, y: 0.67 }
+  landmarks[18] = { x: 0.64, y: 0.55 }
+  landmarks[20] = { x: 0.72, y: 0.3 }
+  return { landmarks, timestamp, inferenceMs: 5 }
+}
+
 describe('AirNote M1 workspace', () => {
   afterEach(cleanup)
 
@@ -78,7 +111,23 @@ describe('AirNote M1 workspace', () => {
     expect(screen.getByRole('heading', { name: '摄像头预览' }).closest('aside')).toHaveClass('context-rail--input')
     expect(screen.getByRole('heading', { name: '手势状态' }).closest('aside')).toHaveClass('context-rail--input')
     expect(screen.getByRole('heading', { name: '画笔属性' }).closest('aside')).toHaveClass('context-rail--settings')
+    expect(screen.getByRole('button', { name: '启用张掌暂停' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('progressbar', { name: '张掌保持进度' })).toHaveAttribute('aria-valuenow', '0')
     expect(getUserMedia).not.toHaveBeenCalled()
+  })
+
+  it('keeps GEST-02 behind a local experimental switch', () => {
+    const { unmount } = render(<App />)
+    const enablePause = screen.getByRole('button', { name: '启用张掌暂停' })
+    fireEvent.click(enablePause)
+
+    expect(screen.getByText('张掌暂停已启用：张开手掌保持 0.8 秒可暂停或恢复。')).toBeInTheDocument()
+    expect(localStorage.getItem('airnote.gesturePauseEnabled')).toBe('true')
+
+    unmount()
+    render(<App />)
+    expect(screen.getByText('切换到手势模式后生效。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '关闭张掌暂停' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('opens Chinese themes from the 空 button and restores the local choice', () => {
@@ -133,12 +182,12 @@ describe('AirNote M1 workspace', () => {
       expect(screen.queryByRole('button', { name: '生成想法卡片' })).not.toBeInTheDocument()
       act(() => vi.advanceTimersByTime(1))
       fireEvent.click(screen.getByRole('button', { name: '生成想法卡片' }))
-      expect(screen.getByText('未命名想法')).toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: '卡片文字注释' })).toHaveValue('')
       expect(screen.getByText('1 CARDS / 0 EDGES')).toBeInTheDocument()
       expect(screen.getAllByRole('button', { name: /连接点创建连接/ })).toHaveLength(4)
-      expect(screen.getByRole('button', { name: '调整卡片 未命名想法 大小' })).toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: /调整卡片 未命名想法 大小/ })).toHaveLength(4)
       fireEvent.click(screen.getByRole('button', { name: '撤销' }))
-      expect(screen.queryByText('未命名想法')).not.toBeInTheDocument()
+      expect(screen.queryByRole('textbox', { name: '卡片文字注释' })).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: '生成想法卡片' })).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
@@ -161,8 +210,27 @@ describe('AirNote M1 workspace', () => {
       drawMouseStroke()
       act(() => vi.advanceTimersByTime(1200))
       fireEvent.click(cardEntry)
-      expect(screen.getByText('未命名想法')).toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: '卡片文字注释' })).toHaveValue('')
       expect(screen.getByText('1 CARDS / 0 EDGES')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('accepts keyboard text immediately after a card is generated', () => {
+    vi.useFakeTimers()
+    try {
+      render(<App />)
+      drawMouseStroke()
+      act(() => vi.advanceTimersByTime(1200))
+      fireEvent.click(screen.getByRole('button', { name: '生成想法卡片' }))
+      const annotation = screen.getByRole('textbox', { name: '卡片文字注释' })
+
+      fireEvent.change(annotation, { target: { value: '键盘记录的想法' } })
+      fireEvent.keyDown(annotation, { key: 'Enter' })
+
+      expect(screen.getByText('键盘记录的想法')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: '键盘输入卡片文字注释：键盘记录的想法' })).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }
@@ -319,6 +387,64 @@ describe('AirNote M1 workspace', () => {
     }
   })
 
+  it('keeps a Particle test Stroke created during calibration review and falls back to Ink safely', async () => {
+    const { stream } = createStream()
+    let processFrame: ((timestamp: number) => void) | undefined
+    let nextFrame: HandFrame | undefined
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: vi.fn().mockResolvedValue(stream) },
+    })
+    mockedCreateHandTracker.mockResolvedValueOnce({
+      detect: vi.fn(() => nextFrame!),
+      close: vi.fn(),
+    })
+    mockedStartVideoFrameLoop.mockImplementationOnce((_video, onFrame) => {
+      processFrame = onFrame
+      return { stop: vi.fn() }
+    })
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: '启用' }))
+    fireEvent.change(screen.getByRole('combobox', { name: '视觉风格' }), {
+      target: { value: 'particle' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
+    await screen.findByRole('button', { name: '关闭摄像头' })
+    fireEvent.click(screen.getByRole('button', { name: '开始校准' }))
+
+    const capture = (frame: HandFrame, buttonName: string) => {
+      nextFrame = frame
+      act(() => processFrame?.(frame.timestamp))
+      fireEvent.click(screen.getByRole('button', { name: buttonName }))
+    }
+    capture(calibrationFrame(0, 0.3, 0.2, 0.2), '记录左上位置')
+    capture(calibrationFrame(16, 0.3, 0.8, 0.2), '记录右上位置')
+    capture(calibrationFrame(32, 0.3, 0.8, 0.8), '记录右下位置')
+    capture(calibrationFrame(48, 0.3, 0.2, 0.8), '记录左下位置')
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      capture(calibrationFrame(64 + cycle * 32, 0.18, 0.5, 0.5), '记录捏合')
+      capture(calibrationFrame(80 + cycle * 32, 0.6, 0.5, 0.5), '记录松开')
+    }
+
+    for (const frame of [
+      calibrationFrame(200, 0.34, 0.5, 0.5),
+      calibrationFrame(216, 0.34, 0.48, 0.5),
+      calibrationFrame(232, 0.34, 0.4, 0.5),
+      calibrationFrame(248, 0.6, 0.4, 0.5),
+      calibrationFrame(264, 0.6, 0.4, 0.5),
+    ]) {
+      nextFrame = frame
+      act(() => processFrame?.(frame.timestamp))
+    }
+
+    expect(screen.getByText('1 STROKES')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }))
+    expect(screen.getByText('1 STROKES')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '校准完成' }))
+    expect(screen.getByText('1 STROKES')).toBeInTheDocument()
+  })
+
   it('requests 640x480 video without audio only after click', async () => {
     const { stream } = createStream()
     const getUserMedia = vi.fn().mockResolvedValue(stream)
@@ -392,6 +518,65 @@ describe('AirNote M1 workspace', () => {
     }
 
     expect(screen.getByRole('button', { name: '手势模式' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('1 STROKES')).toBeInTheDocument()
+  })
+
+  it('pauses after a 0.8 second open-palm hold and creates no Stroke during 10 seconds of movement', async () => {
+    const { stream } = createStream()
+    let processFrame: ((timestamp: number) => void) | undefined
+    let browserNow = 0
+    const pausedMovementFrames = Array.from(
+      { length: 51 },
+      (_, index) => handFrame(1000 + index * 200, 0.3, 0.2 + (index % 5) * 0.1),
+    )
+    const frames = [
+      ...[0, 200, 400, 600, 800].map(openPalmFrame),
+      ...pausedMovementFrames,
+      handFrame(11200, 0.7, 0.5),
+      handFrame(11400, 0.3, 0.5),
+      handFrame(11600, 0.3, 0.5),
+      handFrame(11800, 0.3, 0.4),
+      handFrame(12000, 0.43, 0.4),
+      handFrame(12200, 0.43, 0.4),
+    ]
+    vi.spyOn(performance, 'now').mockImplementation(() => browserNow)
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: vi.fn().mockResolvedValue(stream) },
+    })
+    mockedCreateHandTracker.mockResolvedValueOnce({
+      detect: vi.fn(() => frames.shift()!),
+      close: vi.fn(),
+    })
+    mockedStartVideoFrameLoop.mockImplementationOnce((_video, onFrame) => {
+      processFrame = onFrame
+      return { stop: vi.fn() }
+    })
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: '启用张掌暂停' }))
+    fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
+    await screen.findByRole('button', { name: '关闭摄像头' })
+    fireEvent.click(screen.getByRole('button', { name: '直接使用默认参数' }))
+
+    for (const timestamp of [0, 200, 400, 600, 800]) {
+      browserNow = timestamp
+      act(() => processFrame?.(timestamp))
+    }
+    expect(screen.getByText('PAUSED')).toBeInTheDocument()
+
+    for (let timestamp = 1000; timestamp <= 11000; timestamp += 200) {
+      browserNow = timestamp
+      act(() => processFrame?.(timestamp))
+    }
+    expect(screen.getByText('0 STROKES')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '恢复手势' }))
+    expect(screen.getByText('HOVER')).toBeInTheDocument()
+    for (const timestamp of [11200, 11400, 11600, 11800, 12000, 12200]) {
+      browserNow = timestamp
+      act(() => processFrame?.(timestamp))
+    }
     expect(screen.getByText('1 STROKES')).toBeInTheDocument()
   })
 

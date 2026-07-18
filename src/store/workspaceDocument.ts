@@ -1,3 +1,4 @@
+import type { CardGeometry } from '../layout/cardResize'
 import type {
   AirNoteSettings,
   BoundingBox,
@@ -119,19 +120,26 @@ export const MIN_CARD_SIZE = { width: 120, height: 96 }
 export function resizeCard(
   document: WorkspaceDocument,
   cardId: string,
-  width: number,
-  height: number,
+  geometry: CardGeometry,
   stage: { width: number; height: number },
 ) {
   const card = document.cards.find((item) => item.id === cardId)
-  if (!card || ![width, height, stage.width, stage.height].every(Number.isFinite)) return document
+  const values = [
+    geometry.position.x,
+    geometry.position.y,
+    geometry.size.width,
+    geometry.size.height,
+    stage.width,
+    stage.height,
+  ]
+  if (!card || !values.every(Number.isFinite)) return document
   const size = {
-    width: Math.min(Math.max(MIN_CARD_SIZE.width, width), Math.max(MIN_CARD_SIZE.width, stage.width)),
-    height: Math.min(Math.max(MIN_CARD_SIZE.height, height), Math.max(MIN_CARD_SIZE.height, stage.height)),
+    width: Math.min(Math.max(MIN_CARD_SIZE.width, geometry.size.width), Math.max(MIN_CARD_SIZE.width, stage.width)),
+    height: Math.min(Math.max(MIN_CARD_SIZE.height, geometry.size.height), Math.max(MIN_CARD_SIZE.height, stage.height)),
   }
   const position = {
-    x: Math.min(stage.width - 24, Math.max(24 - size.width, card.position.x)),
-    y: Math.min(stage.height - 24, Math.max(24 - size.height, card.position.y)),
+    x: Math.min(stage.width - 24, Math.max(24 - size.width, geometry.position.x)),
+    y: Math.min(stage.height - 24, Math.max(24 - size.height, geometry.position.y)),
   }
   return touch({
     ...document,

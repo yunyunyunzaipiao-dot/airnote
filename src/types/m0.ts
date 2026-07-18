@@ -16,7 +16,7 @@ export type CameraErrorCode =
   | 'tracking-runtime-failed'
   | 'unknown'
 
-export type GestureState = 'IDLE' | 'HOVER' | 'DRAWING' | 'TRACKING_LOST'
+export type GestureState = 'IDLE' | 'HOVER' | 'DRAWING' | 'PAUSED' | 'TRACKING_LOST'
 
 export interface NormalizedPoint {
   x: number
@@ -68,6 +68,7 @@ export interface RuntimeDiagnostics {
   pinchRatio: number | null
   lostFrames: number
   gestureState: GestureState
+  openPalmHoldProgress: number
 }
 
 export interface M0UiState {

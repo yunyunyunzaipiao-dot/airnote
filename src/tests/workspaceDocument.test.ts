@@ -44,8 +44,12 @@ describe('M2 workspace document', () => {
   it('resizes cards with minimum bounds and keeps them reachable', () => {
     const carded = createCardFromCurrentGroup(addStrokeToCurrentGroup(createWorkspaceDocument(0), stroke('s1')))!
     const card = carded.cards[0]
-    const resized = resizeCard(carded, card.id, 20, 30, { width: 800, height: 600 })
+    const resized = resizeCard(carded, card.id, {
+      position: { x: -500, y: -400 },
+      size: { width: 20, height: 30 },
+    }, { width: 800, height: 600 })
     expect(resized.cards[0].size).toEqual({ width: 120, height: 96 })
+    expect(resized.cards[0].position).toEqual({ x: -96, y: -72 })
     expect(resized.strokes[0].points).toEqual(carded.strokes[0].points)
   })
 

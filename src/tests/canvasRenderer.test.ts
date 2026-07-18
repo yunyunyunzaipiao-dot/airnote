@@ -135,6 +135,26 @@ describe('stroke canvas renderer', () => {
     expect(points).toEqual([{ x: 5, y: 20, t: 1 }, { x: 45, y: 20, t: 2 }, { x: 85, y: 20, t: 3 }])
   })
 
+  it('redraws completed Particle strokes as Ink when experimental effects are disabled', () => {
+    const { renderer, context } = createRenderer()
+    const points = [{ x: 5, y: 20, t: 1 }, { x: 45, y: 20, t: 2 }, { x: 85, y: 20, t: 3 }]
+    renderer.setEffectsEnabled(true)
+    renderer.setCompletedStrokes([{
+      id: 'particle-fallback',
+      points,
+      color: '#55AAEE',
+      width: 4,
+      style: 'particle',
+      createdAt: 1,
+    }])
+    vi.mocked(context.stroke).mockClear()
+
+    renderer.setEffectsEnabled(false)
+
+    expect(context.stroke).toHaveBeenCalled()
+    expect(points).toEqual([{ x: 5, y: 20, t: 1 }, { x: 45, y: 20, t: 2 }, { x: 85, y: 20, t: 3 }])
+  })
+
   it('never strokes a center path while an enabled Particle Stroke is being drawn', () => {
     const { renderer, context } = createRenderer()
     renderer.setEffectsEnabled(true)

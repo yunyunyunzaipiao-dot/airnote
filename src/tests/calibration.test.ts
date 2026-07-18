@@ -35,7 +35,18 @@ describe('camera calibration', () => {
       { pinch: 0.3, release: 0.6 },
       { pinch: 0.32, release: 0.58 },
     ])
-    expect(thresholds?.down).toBeCloseTo(0.33)
+    expect(thresholds?.down).toBeCloseTo(0.38)
+    expect(thresholds?.up).toBeCloseTo(0.54)
+  })
+
+  it('does not save a hand-specific threshold stricter than the portable default', () => {
+    const thresholds = calculatePinchThresholds([
+      { pinch: 0.16, release: 0.58 },
+      { pinch: 0.18, release: 0.6 },
+      { pinch: 0.2, release: 0.62 },
+    ])
+
+    expect(thresholds?.down).toBe(0.35)
     expect(thresholds?.up).toBeCloseTo(0.54)
   })
 

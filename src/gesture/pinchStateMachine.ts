@@ -12,6 +12,8 @@ export const LOST_FRAME_LIMIT = 3
 export const UP_FRAME_LIMIT = 2
 export const FAST_RELEASE_FRAME_LIMIT = 3
 export const FAST_TIP_MOVEMENT_THRESHOLD = 0.035
+export const MAX_RUNTIME_DOWN_THRESHOLD = 0.45
+export const MIN_THRESHOLD_GAP = 0.06
 
 const THUMB_TIP = 4
 const INDEX_MCP = 5
@@ -67,8 +69,26 @@ export function stepGestureMachine(
   if (downThreshold >= upThreshold) {
     throw new Error('downThreshold must be lower than upThreshold')
   }
+  const effectiveDownThreshold = Math.min(
+    MAX_RUNTIME_DOWN_THRESHOLD,
+    Math.max(DEFAULT_DOWN_THRESHOLD, downThreshold),
+  )
+  const effectiveUpThreshold = Math.max(
+    effectiveDownThreshold + MIN_THRESHOLD_GAP,
+    upThreshold,
+  )
 
   const commands: GestureMachineResult['commands'] = []
+  if (previous.state === 'PAUSED') {
+    return {
+      machine: {
+        ...previous,
+        lastFrameAt: frame.timestamp,
+      },
+      commands,
+    }
+  }
+
   const hasFrameGap =
     previous.lastFrameAt !== null && frame.timestamp - previous.lastFrameAt > MAX_FRAME_GAP_MS
 
@@ -144,7 +164,7 @@ export function stepGestureMachine(
   }
 
   if (previous.state === 'HOVER') {
-    const downFrames = pinchRatio <= downThreshold ? previous.downFrames + 1 : 0
+    const downFrames = pinchRatio <= effectiveDownThreshold ? previous.downFrames + 1 : 0
     const shouldStart = downFrames >= 2
     if (shouldStart) {
       commands.push({ type: 'START_STROKE', point: indexTip, timestamp: frame.timestamp })
@@ -171,7 +191,7 @@ export function stepGestureMachine(
   const releaseFrameLimit = tipMovement >= FAST_TIP_MOVEMENT_THRESHOLD
     ? FAST_RELEASE_FRAME_LIMIT
     : UP_FRAME_LIMIT
-  const isReleaseCandidate = pinchRatio >= upThreshold
+  const isReleaseCandidate = pinchRatio >= effectiveUpThreshold
   const upFrames = isReleaseCandidate ? previous.upFrames + 1 : 0
   const shouldEnd = upFrames >= releaseFrameLimit
   if (shouldEnd) {
