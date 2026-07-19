@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { CalibrationPanel } from './components/CalibrationPanel'
 import { CameraPreview } from './components/CameraPreview'
 import { GestureStatus } from './components/GestureStatus'
@@ -6,6 +6,7 @@ import { LeftToolbar } from './components/LeftToolbar'
 import { OnboardingOverlay } from './components/OnboardingOverlay'
 import { TopBar } from './components/TopBar'
 import { WorkspaceCanvas } from './components/WorkspaceCanvas'
+import { ZoomControl } from './components/ZoomControl'
 import { exportProjectPng } from './export/pngExport'
 import { exportProjectJson, readProjectFile } from './export/projectTransfer'
 import { useAirNoteRuntime } from './store/useAirNoteRuntime'
@@ -13,6 +14,7 @@ import { useAirNoteRuntime } from './store/useAirNoteRuntime'
 export function App() {
   const runtime = useAirNoteRuntime()
   const pointerEventsSupported = typeof window.PointerEvent !== 'undefined'
+  const [zoom, setZoom] = useState(1)
 
   useEffect(() => {
     if (!runtime.workspaceMessage) return
@@ -113,33 +115,46 @@ export function App() {
         </div>
 
         {/* 全屏画布 */}
-        <WorkspaceCanvas
-          inputMode={runtime.settings.inputMode}
-          experimentalStylesEnabled={runtime.settings.experimentalStylesEnabled}
-          reducedMotion={runtime.reducedMotion}
-          tool={runtime.tool}
-          edgeType={runtime.edgeType}
-          strokes={runtime.strokes}
-          cards={runtime.document.cards}
-          edges={runtime.document.edges}
-          currentGroup={runtime.currentGroup}
-          calibration={runtime.calibration}
-          onReady={runtime.attachCanvas}
-          onPointerStart={runtime.startMouseStroke}
-          onPointerMove={runtime.appendMousePoint}
-          onPointerEnd={runtime.endMouseStroke}
-          onSuggestSelection={runtime.suggestSelectionGroup}
-          onGenerateCard={runtime.generateCard}
-          onContinueGroup={runtime.continueGroup}
-          onCancelGroup={runtime.cancelGroup}
-          onMoveCard={runtime.commitCardMove}
-          onResizeCard={runtime.commitCardResize}
-          onRenameCard={runtime.commitCardRename}
-          onDeleteCard={runtime.commitCardDelete}
-          onCreateEdge={runtime.commitEdge}
-          onUpdateEdge={runtime.commitEdgeType}
-          onEdgeTypeChange={runtime.setEdgeType}
-        />
+        <div
+          className="workspace-zoom-container"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: `${100 / zoom}%`,
+            height: `${100 / zoom}%`,
+            transform: `scale(${zoom})`,
+            transformOrigin: 'top left',
+          }}
+        >
+          <WorkspaceCanvas
+            inputMode={runtime.settings.inputMode}
+            experimentalStylesEnabled={runtime.settings.experimentalStylesEnabled}
+            reducedMotion={runtime.reducedMotion}
+            tool={runtime.tool}
+            edgeType={runtime.edgeType}
+            strokes={runtime.strokes}
+            cards={runtime.document.cards}
+            edges={runtime.document.edges}
+            currentGroup={runtime.currentGroup}
+            calibration={runtime.calibration}
+            zoom={zoom}
+            onReady={runtime.attachCanvas}
+            onPointerStart={runtime.startMouseStroke}
+            onPointerMove={runtime.appendMousePoint}
+            onPointerEnd={runtime.endMouseStroke}
+            onSuggestSelection={runtime.suggestSelectionGroup}
+            onGenerateCard={runtime.generateCard}
+            onContinueGroup={runtime.continueGroup}
+            onCancelGroup={runtime.cancelGroup}
+            onMoveCard={runtime.commitCardMove}
+            onResizeCard={runtime.commitCardResize}
+            onRenameCard={runtime.commitCardRename}
+            onDeleteCard={runtime.commitCardDelete}
+            onCreateEdge={runtime.commitEdge}
+            onUpdateEdge={runtime.commitEdgeType}
+            onEdgeTypeChange={runtime.setEdgeType}
+          />
+        </div>
 
         {/* 右侧浮动面板 */}
         <div className="floating-right" aria-label="校准与属性面板">
@@ -158,6 +173,7 @@ export function App() {
         {!runtime.onboardingCompleted ? (
           <OnboardingOverlay onComplete={runtime.completeOnboarding} />
         ) : null}
+        <ZoomControl zoom={zoom} onZoomChange={setZoom} />
       </div>
     </main>
   )

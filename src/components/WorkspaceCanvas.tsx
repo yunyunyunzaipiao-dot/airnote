@@ -29,6 +29,7 @@ interface WorkspaceCanvasProps {
   edges: Edge[]
   currentGroup: StrokeGroup | null
   calibration: CalibrationUiState
+  zoom: number
   onReady: (canvas: HTMLCanvasElement, cursor: HTMLElement) => void
   onPointerStart: (point: { x: number; y: number }, timestamp: number) => void
   onPointerMove: (point: { x: number; y: number }, timestamp: number) => void
@@ -46,9 +47,9 @@ interface WorkspaceCanvasProps {
   onEdgeTypeChange: (type: Edge['type']) => void
 }
 
-function canvasPoint(event: PointerEvent<HTMLCanvasElement>) {
+function canvasPoint(event: PointerEvent<HTMLCanvasElement>, zoom: number) {
   const bounds = event.currentTarget.getBoundingClientRect()
-  return { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
+  return { x: (event.clientX - bounds.left) / zoom, y: (event.clientY - bounds.top) / zoom }
 }
 
 interface CardDragPreview {
@@ -69,7 +70,7 @@ interface SelectionDraft {
 }
 
 export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
-  const { inputMode, tool, strokes, cards, edges, currentGroup, calibration } = props
+  const { inputMode, tool, strokes, cards, edges, currentGroup, calibration, zoom } = props
   const stageRef = useRef<HTMLElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const cursorRef = useRef<HTMLDivElement>(null)
@@ -309,11 +310,11 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     if (inputMode !== 'mouse' || event.button !== 0) return
     if (tool === 'draw') {
       event.currentTarget.setPointerCapture(event.pointerId)
-      props.onPointerStart(canvasPoint(event), event.timeStamp)
+      props.onPointerStart(canvasPoint(event, zoom), event.timeStamp)
       return
     }
     if (tool !== 'lasso-rect' && tool !== 'lasso-free') return
-    const point = canvasPoint(event)
+    const point = canvasPoint(event, zoom)
     event.currentTarget.setPointerCapture(event.pointerId)
     setSelection({
       pointerId: event.pointerId,
@@ -327,10 +328,10 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
   const moveCanvasAction = (event: PointerEvent<HTMLCanvasElement>) => {
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
     if (tool === 'draw') {
-      props.onPointerMove(canvasPoint(event), event.timeStamp)
+      props.onPointerMove(canvasPoint(event, zoom), event.timeStamp)
       return
     }
-    const point = canvasPoint(event)
+    const point = canvasPoint(event, zoom)
     setSelection((current) => {
       if (!current || current.pointerId !== event.pointerId) return current
       return {
@@ -351,7 +352,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     }
     if (!selection || selection.pointerId !== event.pointerId) return
     if (!cancelled) {
-      const end = canvasPoint(event)
+      const end = canvasPoint(event, zoom)
       const strokeIds = selection.mode === 'rect'
         ? strokeIdsInRectangle(strokes, selectionRect(selection.start, end))
         : strokeIdsInFreeform(strokes, [...selection.points, end])

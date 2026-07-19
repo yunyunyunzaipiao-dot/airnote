@@ -4448,6 +4448,60 @@ body {
   background: var(--frame);
 }
 
+/* Zoom control */
+.zoom-control {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--ui-panel-solid);
+  box-shadow: 0 8px 32px var(--ui-shadow), 0 2px 8px var(--ui-shadow);
+}
+
+.zoom-control__btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--ink);
+  background: transparent;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.zoom-control__btn:hover {
+  background: var(--ui-button);
+}
+
+.zoom-control__value {
+  min-width: 48px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--ink);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-align: center;
+  transition: background 150ms ease;
+}
+
+.zoom-control__value:hover {
+  background: var(--ui-button);
+}
+
 /* Context rails hidden in new layout */
 .context-rail {
   display: none;
