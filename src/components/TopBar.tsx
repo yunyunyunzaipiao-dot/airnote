@@ -42,12 +42,12 @@ export function TopBar({
   }
   return (
     <header className="top-bar">
-      <div className="brand-lockup">
+      <div className="top-bar__left">
+        <button type="button" className="top-bar__back" aria-label="返回" title="返回">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
         <ThemeMenu />
-        <div>
-          <p className="eyebrow">AIRNOTE · P1 STYLE LAB</p>
-          <h1>空书 <span>/ AirNote</span></h1>
-        </div>
+        <h1 className="top-bar__title">Product Strategy Brainstorm</h1>
       </div>
 
       <div className="top-bar__status" aria-label="工作区状态">
@@ -60,16 +60,14 @@ export function TopBar({
       <nav className="top-bar__actions" aria-label="项目操作">
         <button type="button" className="history-action" aria-label="撤销" onClick={onUndo} disabled={!canUndo} title="撤销：Ctrl/Cmd+Z">
           <span className="history-action__icon" aria-hidden="true">↶</span>
-          <span className="history-action__copy"><strong>撤销</strong><small>Ctrl/Cmd+Z</small></span>
         </button>
         <button type="button" className="history-action" aria-label="重做" onClick={onRedo} disabled={!canRedo} title="重做：Ctrl/Cmd+Shift+Z">
           <span className="history-action__icon" aria-hidden="true">↷</span>
-          <span className="history-action__copy"><strong>重做</strong><small>Ctrl/Cmd+Shift+Z</small></span>
         </button>
-        <button type="button" className="danger-action" onClick={onClear} disabled={!hasContent}>清空</button>
-        <button type="button" className="project-action project-action--primary" onClick={onExportPng}>导出图片</button>
-        <button type="button" className="project-action" onClick={onExportProject}>导出项目</button>
-        <button type="button" className="project-action" onClick={() => importInputRef.current?.click()}>导入项目</button>
+        <button type="button" className="danger-action" aria-label="清空" onClick={onClear} disabled={!hasContent} title="清空">🗑</button>
+        <button type="button" className="project-action project-action--primary" aria-label="导出图片" onClick={onExportPng} title="导出图片">📷</button>
+        <button type="button" className="project-action" aria-label="导出项目" onClick={onExportProject} title="导出项目">💾</button>
+        <button type="button" className="project-action" aria-label="导入项目" onClick={() => importInputRef.current?.click()} title="导入项目">📂</button>
         <input
           ref={importInputRef}
           className="visually-hidden"

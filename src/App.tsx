@@ -1,8 +1,8 @@
+import { useEffect } from 'react'
 import { CalibrationPanel } from './components/CalibrationPanel'
 import { CameraPreview } from './components/CameraPreview'
 import { GestureStatus } from './components/GestureStatus'
 import { LeftToolbar } from './components/LeftToolbar'
-import { PropertyPanel } from './components/PropertyPanel'
 import { TopBar } from './components/TopBar'
 import { WorkspaceCanvas } from './components/WorkspaceCanvas'
 import { exportProjectPng } from './export/pngExport'
@@ -12,6 +12,14 @@ import { useAirNoteRuntime } from './store/useAirNoteRuntime'
 export function App() {
   const runtime = useAirNoteRuntime()
   const pointerEventsSupported = typeof window.PointerEvent !== 'undefined'
+
+  useEffect(() => {
+    if (!runtime.workspaceMessage) return
+    const timer = setTimeout(() => {
+      runtime.reportWorkspaceMessage(null)
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [runtime.workspaceMessage])
 
   const confirmClear = () => {
     const confirmed = window.confirm('将清空当前画布中的笔迹、卡片和连接线。此操作可撤销一次。')
@@ -66,7 +74,24 @@ export function App() {
         onImportProject={importProject}
       />
       <div className="workspace-layout">
-        <aside className="context-rail context-rail--input" aria-label="摄像头与手势面板">
+        {/* 左侧浮动工具栏 */}
+        <div className="floating-sidebar" aria-label="工具与摄像头面板">
+          <LeftToolbar
+            tool={runtime.tool}
+            inputMode={runtime.settings.inputMode}
+            brush={runtime.settings.brush}
+            gesturePauseEnabled={runtime.gesturePauseEnabled}
+            experimentalStylesEnabled={runtime.settings.experimentalStylesEnabled}
+            performanceStage={runtime.stylePerformanceStage}
+            reducedMotion={runtime.reducedMotion}
+            onChange={runtime.setTool}
+            onInputModeChange={runtime.setInputMode}
+            onGesturePauseEnabledChange={runtime.setGesturePauseEnabled}
+            onExperimentalStylesChange={runtime.setExperimentalStylesEnabled}
+            onUpdateBrush={runtime.updateBrush}
+            onInsertImage={() => runtime.reportWorkspaceMessage('插入图片功能即将推出。')}
+          />
+          <div className="floating-divider" aria-hidden="true" />
           <CameraPreview
             status={runtime.uiState.cameraStatus}
             settings={runtime.uiState.cameraSettings}
@@ -82,56 +107,41 @@ export function App() {
           />
           <GestureStatus
             diagnostics={runtime.uiState.diagnostics}
-            pauseEnabled={runtime.gesturePauseEnabled}
-            gestureModeActive={
-              runtime.settings.inputMode === 'gesture'
-              && runtime.uiState.cameraStatus === 'running'
-              && runtime.calibration.phase === 'ready'
-            }
-            onPauseEnabledChange={runtime.setGesturePauseEnabled}
             onResume={runtime.resumeGestureInput}
           />
-          {runtime.workspaceMessage ? (
-            <p className="workspace-toast" role="status">{runtime.workspaceMessage}</p>
-          ) : null}
-        </aside>
-        <div className="workspace-primary">
-          <LeftToolbar
-            tool={runtime.tool}
-            brushStyle={runtime.settings.brush.style}
-            experimentalStylesEnabled={runtime.settings.experimentalStylesEnabled}
-            onChange={runtime.setTool}
-            onBrushStyleChange={(style) => runtime.updateBrush({ ...runtime.settings.brush, style })}
-          />
-          <WorkspaceCanvas
-            inputMode={runtime.settings.inputMode}
-            experimentalStylesEnabled={runtime.settings.experimentalStylesEnabled}
-            reducedMotion={runtime.reducedMotion}
-            tool={runtime.tool}
-            edgeType={runtime.edgeType}
-            strokes={runtime.strokes}
-            cards={runtime.document.cards}
-            edges={runtime.document.edges}
-            currentGroup={runtime.currentGroup}
-            calibration={runtime.calibration}
-            onReady={runtime.attachCanvas}
-            onPointerStart={runtime.startMouseStroke}
-            onPointerMove={runtime.appendMousePoint}
-            onPointerEnd={runtime.endMouseStroke}
-            onSuggestSelection={runtime.suggestSelectionGroup}
-            onGenerateCard={runtime.generateCard}
-            onContinueGroup={runtime.continueGroup}
-            onCancelGroup={runtime.cancelGroup}
-            onMoveCard={runtime.commitCardMove}
-            onResizeCard={runtime.commitCardResize}
-            onRenameCard={runtime.commitCardRename}
-            onDeleteCard={runtime.commitCardDelete}
-            onCreateEdge={runtime.commitEdge}
-            onUpdateEdge={runtime.commitEdgeType}
-            onEdgeTypeChange={runtime.setEdgeType}
-          />
         </div>
-        <aside className="context-rail context-rail--settings" aria-label="校准与画笔属性面板">
+
+        {/* 全屏画布 */}
+        <WorkspaceCanvas
+          inputMode={runtime.settings.inputMode}
+          experimentalStylesEnabled={runtime.settings.experimentalStylesEnabled}
+          reducedMotion={runtime.reducedMotion}
+          tool={runtime.tool}
+          edgeType={runtime.edgeType}
+          strokes={runtime.strokes}
+          cards={runtime.document.cards}
+          edges={runtime.document.edges}
+          currentGroup={runtime.currentGroup}
+          calibration={runtime.calibration}
+          onReady={runtime.attachCanvas}
+          onPointerStart={runtime.startMouseStroke}
+          onPointerMove={runtime.appendMousePoint}
+          onPointerEnd={runtime.endMouseStroke}
+          onSuggestSelection={runtime.suggestSelectionGroup}
+          onGenerateCard={runtime.generateCard}
+          onContinueGroup={runtime.continueGroup}
+          onCancelGroup={runtime.cancelGroup}
+          onMoveCard={runtime.commitCardMove}
+          onResizeCard={runtime.commitCardResize}
+          onRenameCard={runtime.commitCardRename}
+          onDeleteCard={runtime.commitCardDelete}
+          onCreateEdge={runtime.commitEdge}
+          onUpdateEdge={runtime.commitEdgeType}
+          onEdgeTypeChange={runtime.setEdgeType}
+        />
+
+        {/* 右侧浮动面板 */}
+        <div className="floating-right" aria-label="校准与属性面板">
           <CalibrationPanel
             calibration={runtime.calibration}
             cameraRunning={runtime.uiState.cameraStatus === 'running'}
@@ -140,15 +150,10 @@ export function App() {
             onConfirm={runtime.confirmCalibration}
             onSkip={runtime.skipCalibration}
           />
-          <PropertyPanel
-            brush={runtime.settings.brush}
-            experimentalStylesEnabled={runtime.settings.experimentalStylesEnabled}
-            performanceStage={runtime.stylePerformanceStage}
-            reducedMotion={runtime.reducedMotion}
-            onChange={runtime.updateBrush}
-            onExperimentalStylesChange={runtime.setExperimentalStylesEnabled}
-          />
-        </aside>
+        </div>
+        {runtime.workspaceMessage ? (
+          <p className="workspace-toast workspace-toast--visible" role="status">{runtime.workspaceMessage}</p>
+        ) : null}
       </div>
     </main>
   )

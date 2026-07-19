@@ -61,7 +61,7 @@ function validSettings(value: unknown) {
     'handPreference',
     'calibrated',
     'usesDefaultCalibration',
-  ])) return false
+  ], ['drawMode'])) return false
   const gesture = value.gesture
   if (!record(gesture.writingROI) || !hasOnlyKeys(gesture.writingROI, ['left', 'top', 'right', 'bottom'])) return false
   const roi = gesture.writingROI
@@ -70,6 +70,7 @@ function validSettings(value: unknown) {
   if (![gesture.pinchDownThreshold, gesture.pinchUpThreshold].every(finite)) return false
   if ((gesture.pinchDownThreshold as number) >= (gesture.pinchUpThreshold as number)) return false
   return gesture.handPreference === 'any'
+    && (gesture.drawMode === undefined || gesture.drawMode === 'mode1' || gesture.drawMode === 'mode2')
     && typeof gesture.calibrated === 'boolean'
     && typeof gesture.usesDefaultCalibration === 'boolean'
 }
@@ -101,6 +102,7 @@ export function validateProjectDetailed(value: unknown): ProjectValidationResult
   }
 
   const project = structuredClone(value) as unknown as AirNoteProject
+  delete (project.settings.gesture as unknown as Record<string, unknown>).drawMode
   project.settings.experimentalStylesEnabled = value.settings && record(value.settings)
     ? value.settings.experimentalStylesEnabled === true
     : false

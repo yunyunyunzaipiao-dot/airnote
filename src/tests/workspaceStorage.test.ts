@@ -35,4 +35,16 @@ describe('workspace persistence', () => {
     expect(restored.settings.experimentalStylesEnabled).toBe(false)
     expect(restored.settings.brush.style).toBe('ink')
   })
+
+  it('loads and strips drawMode from a temporary schemaVersion 1 project', () => {
+    const storage = memoryStorage()
+    const project = projectFromDocument(createWorkspaceDocument(0), structuredClone(DEFAULT_SETTINGS))
+    const temporaryProject = structuredClone(project) as unknown as Record<string, unknown>
+    const temporarySettings = temporaryProject.settings as Record<string, unknown>
+    const temporaryGesture = temporarySettings.gesture as Record<string, unknown>
+    temporaryGesture.drawMode = 'mode2'
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(temporaryProject))
+    const restored = loadWorkspace(storage)!
+    expect(restored.settings.gesture).not.toHaveProperty('drawMode')
+  })
 })

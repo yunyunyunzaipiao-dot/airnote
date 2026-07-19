@@ -1,15 +1,25 @@
 import { useState } from 'react'
-import type { VisualStyle, WorkspaceTool } from '../types/workspace'
+import type { BrushSettings, InputMode, VisualStyle, WorkspaceTool } from '../types/workspace'
+import type { StylePerformanceStage } from '../drawing/canvasRenderer'
+import { BrushPopover } from './BrushPopover'
 
 interface LeftToolbarProps {
   tool: WorkspaceTool
-  brushStyle: VisualStyle
+  inputMode: InputMode
+  brush: BrushSettings
+  gesturePauseEnabled: boolean
   experimentalStylesEnabled: boolean
+  performanceStage: StylePerformanceStage
+  reducedMotion: boolean
   onChange: (tool: WorkspaceTool) => void
-  onBrushStyleChange: (style: VisualStyle) => void
+  onInputModeChange: (mode: InputMode) => void
+  onGesturePauseEnabledChange: (enabled: boolean) => void
+  onExperimentalStylesChange: (enabled: boolean) => void
+  onUpdateBrush: (brush: BrushSettings) => void
+  onInsertImage: () => void
 }
 
-type IconName = 'pointer' | 'lasso' | 'rect' | 'free' | 'pen' | 'ink' | 'glow' | 'particle'
+type IconName = 'pointer' | 'lasso' | 'rect' | 'free' | 'pen' | 'hand' | 'palm' | 'image' | 'star'
 
 function ToolIcon({ name }: { name: IconName }) {
   if (name === 'pointer') {
@@ -27,23 +37,38 @@ function ToolIcon({ name }: { name: IconName }) {
   if (name === 'pen') {
     return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4.5l5 5L9 20H4v-5L14.5 4.5z" /><path d="M12.5 6.5l5 5" /></svg>
   }
-  if (name === 'ink') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17c4-1 5-7 9-9 2-1 4 0 4 2 0 4-6 3-7 7-.5 2 3 2 7 1" /></svg>
+  if (name === 'hand') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 11V6a2 2 0 00-2-2v0a2 2 0 00-2 2v0" /><path d="M14 10V4a2 2 0 00-2-2v0a2 2 0 00-2 2v2" /><path d="M10 10.5V6a2 2 0 00-2-2v0a2 2 0 00-2 2v8.5" /><path d="M18.5 15.5c.5-1.5.5-2.5-.5-3.5s-2.5-1-4-.5" /><path d="M6 12c-1.5.5-2.5 1.5-2.5 3s1 2.5 2 3.5 3 2 5 2 4-.5 5.5-1.5 2-2.5 2.5-4" /></svg>
   }
-  if (name === 'glow') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 16c4-1 5-7 9-9 2-1 4 0 4 2 0 4-6 3-7 7-.5 2 3 2 7 1" /><path d="M4 20h16M3 12h2M19 5l1-1" className="icon-soft" /></svg>
+  if (name === 'palm') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11v8" /><path d="M8 10.5V15" /><path d="M16 10.5V15" /><path d="M20 12.5V16" /><path d="M4 12.5V16" /><circle cx="12" cy="5" r="2" /><circle cx="8" cy="7" r="1.5" /><circle cx="16" cy="7" r="1.5" /><circle cx="4" cy="10" r="1.5" /><circle cx="20" cy="10" r="1.5" /></svg>
   }
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 16c4-1 5-7 9-9 2-1 4 0 4 2 0 4-6 3-7 7-.5 2 3 2 7 1" /><circle cx="5" cy="7" r="1" /><circle cx="19" cy="14" r="1" /><circle cx="14" cy="21" r="1" /></svg>
+  if (name === 'image') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></svg>
+  }
+  if (name === 'star') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+  }
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" /></svg>
 }
 
 export function LeftToolbar({
   tool,
-  brushStyle,
+  inputMode,
+  brush,
+  gesturePauseEnabled,
   experimentalStylesEnabled,
+  performanceStage,
+  reducedMotion,
   onChange,
-  onBrushStyleChange,
+  onInputModeChange,
+  onGesturePauseEnabledChange,
+  onExperimentalStylesChange,
+  onUpdateBrush,
+  onInsertImage,
 }: LeftToolbarProps) {
-  const [openMenu, setOpenMenu] = useState<'lasso' | 'brush' | null>(null)
+  const [openMenu, setOpenMenu] = useState<'lasso' | null>(null)
+  const [brushPopoverOpen, setBrushPopoverOpen] = useState(false)
   const lassoActive = tool === 'lasso-rect' || tool === 'lasso-free'
 
   const chooseTool = (nextTool: WorkspaceTool) => {
@@ -58,11 +83,63 @@ export function LeftToolbar({
           className={`tool-action tool-action--icon ${tool === 'select' ? 'tool-action--active' : ''}`}
           type="button"
           aria-label="选择卡片"
-          title="选择卡片：移动、改名、缩放或从锚点连线"
+          title="选择卡片"
           aria-pressed={tool === 'select'}
           onClick={() => chooseTool('select')}
         >
           <ToolIcon name="pointer" />
+        </button>
+
+        <button
+          className={`tool-action tool-action--icon ${inputMode === 'gesture' ? 'tool-action--active' : ''}`}
+          type="button"
+          aria-label="切换手势模式"
+          title="切换手势模式"
+          aria-pressed={inputMode === 'gesture'}
+          onClick={() => onInputModeChange(inputMode === 'mouse' ? 'gesture' : 'mouse')}
+        >
+          <ToolIcon name="hand" />
+        </button>
+
+        <div className="tool-menu">
+          <button
+            className={`tool-action tool-action--icon ${tool === 'draw' ? 'tool-action--active' : ''}`}
+            type="button"
+            aria-label="画笔"
+            title="画笔"
+            aria-pressed={tool === 'draw'}
+            aria-expanded={brushPopoverOpen}
+            onClick={() => {
+              onChange('draw')
+              setBrushPopoverOpen(v => !v)
+            }}
+          >
+            <ToolIcon name="pen" />
+          </button>
+          {brushPopoverOpen ? (
+            <div className="tool-popover tool-popover--brush" role="dialog" aria-label="画笔属性">
+              <BrushPopover
+                brush={brush}
+                experimentalStylesEnabled={experimentalStylesEnabled}
+                performanceStage={performanceStage}
+                reducedMotion={reducedMotion}
+                onChange={onUpdateBrush}
+                onExperimentalStylesChange={onExperimentalStylesChange}
+                onClose={() => setBrushPopoverOpen(false)}
+              />
+            </div>
+          ) : null}
+        </div>
+
+        <button
+          className={`tool-action tool-action--icon ${gesturePauseEnabled ? 'tool-action--active' : ''}`}
+          type="button"
+          aria-label={gesturePauseEnabled ? '关闭张掌暂停' : '启用张掌暂停'}
+          title={gesturePauseEnabled ? '张掌暂停已启用' : '张掌暂停已关闭'}
+          aria-pressed={gesturePauseEnabled}
+          onClick={() => onGesturePauseEnabledChange(!gesturePauseEnabled)}
+        >
+          <ToolIcon name="palm" />
         </button>
 
         <div className="tool-menu">
@@ -70,15 +147,15 @@ export function LeftToolbar({
             className={`tool-action tool-action--icon ${lassoActive ? 'tool-action--active' : ''}`}
             type="button"
             aria-label="选择笔画区域"
-            title="选择笔画：框选或自由套索，完成后显示生成卡片建议"
+            title="选择笔画"
             aria-expanded={openMenu === 'lasso'}
             aria-pressed={lassoActive}
-            onClick={() => setOpenMenu((current) => current === 'lasso' ? null : 'lasso')}
+            onClick={() => setOpenMenu((current: 'lasso' | null) => current === 'lasso' ? null : 'lasso')}
           >
             <ToolIcon name="lasso" />
           </button>
           {openMenu === 'lasso' ? (
-            <div className="tool-popover" role="menu" aria-label="笔画选区方式">
+            <div className="tool-popover tool-popover--vertical" role="menu" aria-label="笔画选区方式">
               <button type="button" role="menuitem" aria-label="矩形框选笔画" title="矩形框选" onClick={() => chooseTool('lasso-rect')}>
                 <ToolIcon name="rect" />
               </button>
@@ -89,58 +166,26 @@ export function LeftToolbar({
           ) : null}
         </div>
 
-        <div className="tool-menu">
-          <button
-            className={`tool-action tool-action--icon ${tool === 'draw' ? 'tool-action--active' : ''}`}
-            type="button"
-            aria-label="画笔"
-            title="画笔：选择墨迹、辉光或粒子"
-            aria-expanded={openMenu === 'brush'}
-            aria-pressed={tool === 'draw'}
-            onClick={() => {
-              onChange('draw')
-              setOpenMenu((current) => current === 'brush' ? null : 'brush')
-            }}
-          >
-            <ToolIcon name="pen" />
-          </button>
-          {openMenu === 'brush' ? (
-            <div className="tool-popover tool-popover--brush" role="menu" aria-label="画笔样式">
-              <button
-                className={brushStyle === 'ink' ? 'is-active' : ''}
-                type="button"
-                role="menuitem"
-                aria-label="墨迹画笔"
-                title="墨迹"
-                onClick={() => { onBrushStyleChange('ink'); setOpenMenu(null) }}
-              >
-                <ToolIcon name="ink" />
-              </button>
-              <button
-                className={brushStyle === 'glow' ? 'is-active' : ''}
-                type="button"
-                role="menuitem"
-                aria-label={experimentalStylesEnabled ? '辉光画笔' : '辉光画笔（请先开启实验功能）'}
-                title={experimentalStylesEnabled ? '辉光' : '辉光：请先在右侧开启实验功能'}
-                disabled={!experimentalStylesEnabled}
-                onClick={() => { onBrushStyleChange('glow'); setOpenMenu(null) }}
-              >
-                <ToolIcon name="glow" />
-              </button>
-              <button
-                className={brushStyle === 'particle' ? 'is-active' : ''}
-                type="button"
-                role="menuitem"
-                aria-label={experimentalStylesEnabled ? '粒子画笔' : '粒子画笔（请先开启实验功能）'}
-                title={experimentalStylesEnabled ? '粒子' : '粒子：请先在右侧开启实验功能'}
-                disabled={!experimentalStylesEnabled}
-                onClick={() => { onBrushStyleChange('particle'); setOpenMenu(null) }}
-              >
-                <ToolIcon name="particle" />
-              </button>
-            </div>
-          ) : null}
-        </div>
+        <button
+          className="tool-action tool-action--icon"
+          type="button"
+          aria-label="插入图片"
+          title="插入图片"
+          onClick={onInsertImage}
+        >
+          <ToolIcon name="image" />
+        </button>
+
+        <button
+          className={`tool-action tool-action--icon ${experimentalStylesEnabled ? 'tool-action--active' : ''}`}
+          type="button"
+          aria-label={experimentalStylesEnabled ? '工具栏关闭实验视觉' : '工具栏启用实验视觉'}
+          title={experimentalStylesEnabled ? '实验视觉已启用' : '实验视觉已关闭'}
+          aria-pressed={experimentalStylesEnabled}
+          onClick={() => onExperimentalStylesChange(!experimentalStylesEnabled)}
+        >
+          <ToolIcon name="star" />
+        </button>
       </div>
     </nav>
   )

@@ -56,4 +56,13 @@ describe('settings persistence', () => {
     expect(enabled.experimentalStylesEnabled).toBe(true)
     expect(enabled.brush.style).toBe('glow')
   })
+
+  it('ignores the removed drawMode preference from a temporary build', () => {
+    const temporarySettings = {
+      ...DEFAULT_SETTINGS,
+      gesture: { ...DEFAULT_SETTINGS.gesture, drawMode: 'mode2' },
+    }
+    expect(loadSettings({ getItem: () => JSON.stringify(temporarySettings) }).gesture)
+      .not.toHaveProperty('drawMode')
+  })
 })

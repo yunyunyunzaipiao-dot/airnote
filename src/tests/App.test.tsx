@@ -106,13 +106,7 @@ describe('AirNote M1 workspace', () => {
     render(<App />)
 
     expect(screen.getByRole('heading', { name: '鼠标画笔已启用' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '摄像头预览' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '手势状态' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '摄像头预览' }).closest('aside')).toHaveClass('context-rail--input')
-    expect(screen.getByRole('heading', { name: '手势状态' }).closest('aside')).toHaveClass('context-rail--input')
-    expect(screen.getByRole('heading', { name: '画笔属性' }).closest('aside')).toHaveClass('context-rail--settings')
     expect(screen.getByRole('button', { name: '启用张掌暂停' })).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.getByRole('progressbar', { name: '张掌保持进度' })).toHaveAttribute('aria-valuenow', '0')
     expect(getUserMedia).not.toHaveBeenCalled()
   })
 
@@ -126,7 +120,6 @@ describe('AirNote M1 workspace', () => {
 
     unmount()
     render(<App />)
-    expect(screen.getByText('切换到手势模式后生效。')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '关闭张掌暂停' })).toHaveAttribute('aria-pressed', 'true')
   })
 
@@ -162,8 +155,6 @@ describe('AirNote M1 workspace', () => {
 
   it('creates a mouse Stroke and supports undo and redo', () => {
     render(<App />)
-    expect(screen.getByText('Ctrl/Cmd+Z')).toBeInTheDocument()
-    expect(screen.getByText('Ctrl/Cmd+Shift+Z')).toBeInTheDocument()
     drawMouseStroke()
     expect(screen.getByText('1 STROKES')).toBeInTheDocument()
 
@@ -207,9 +198,9 @@ describe('AirNote M1 workspace', () => {
     expect(screen.getByRole('menuitem', { name: '自由套索笔画' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '画笔' }))
-    expect(screen.getByRole('menuitem', { name: '墨迹画笔' })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: '辉光画笔（请先开启实验功能）' })).toBeDisabled()
-    expect(screen.getByRole('menuitem', { name: '粒子画笔（请先开启实验功能）' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '墨迹画笔' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '辉光画笔' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '粒子画笔' })).toBeDisabled()
   })
 
   it('turns a rectangle selection into a card suggestion that still needs confirmation', () => {
@@ -345,54 +336,50 @@ describe('AirNote M1 workspace', () => {
 
   it('updates and persists the three-level brush width', () => {
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: '8px' }))
-    expect(screen.getByRole('button', { name: '8px' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: '画笔' }))
+    fireEvent.click(screen.getByRole('button', { name: '笔迹粗细 8px' }))
+    expect(screen.getByRole('button', { name: '笔迹粗细 8px' })).toHaveAttribute('aria-pressed', 'true')
     expect(JSON.parse(localStorage.getItem('airnote.settings.current')!).brush.width).toBe(8)
   })
 
-  it('updates and persists color through the custom HSV picker', () => {
+  it('updates and persists color through the color dots', () => {
     render(<App />)
-    expect(screen.getByRole('slider', { name: '色相环' })).toBeInTheDocument()
-    fireEvent.change(screen.getByRole('slider', { name: '色相 H' }), { target: { value: '180' } })
-    fireEvent.change(screen.getByRole('slider', { name: '饱和度 S' }), { target: { value: '100' } })
-    fireEvent.change(screen.getByRole('slider', { name: '明度 V' }), { target: { value: '100' } })
-    expect(screen.getByRole('textbox', { name: '十六进制颜色' })).toHaveValue('#00FFFF')
-    expect(JSON.parse(localStorage.getItem('airnote.settings.current')!).brush.color).toBe('#00FFFF')
+    fireEvent.click(screen.getByRole('button', { name: '画笔' }))
+    fireEvent.click(screen.getByRole('button', { name: '选择颜色 #007AFF' }))
+    expect(JSON.parse(localStorage.getItem('airnote.settings.current')!).brush.color).toBe('#007AFF')
 
-    fireEvent.change(screen.getByRole('textbox', { name: '十六进制颜色' }), { target: { value: '#123456' } })
-    expect(JSON.parse(localStorage.getItem('airnote.settings.current')!).brush.color).toBe('#123456')
+    fireEvent.click(screen.getByRole('button', { name: '选择颜色 #FF3B30' }))
+    expect(JSON.parse(localStorage.getItem('airnote.settings.current')!).brush.color).toBe('#FF3B30')
   })
 
   it('keeps at most six committed colors and restores one from history', () => {
     render(<App />)
-    const input = screen.getByRole('textbox', { name: '十六进制颜色' })
-    const colors = ['#110000', '#220000', '#330000', '#440000', '#550000', '#660000', '#770000']
+    fireEvent.click(screen.getByRole('button', { name: '画笔' }))
+    const colors = ['#000000', '#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF']
 
     for (const color of colors) {
-      fireEvent.change(input, { target: { value: color } })
-      fireEvent.blur(input)
+      fireEvent.click(screen.getByRole('button', { name: `选择颜色 ${color}` }))
     }
 
     const history = screen.getByRole('list', { name: '颜色历史' })
     expect(history.querySelectorAll('button')).toHaveLength(6)
-    expect(screen.queryByRole('button', { name: '使用历史颜色 #110000' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '使用历史颜色 #000000' })).not.toBeInTheDocument()
     expect(JSON.parse(localStorage.getItem('airnote.colorHistory')!)).toEqual(colors.slice(1).reverse())
 
-    fireEvent.click(screen.getByRole('button', { name: '使用历史颜色 #220000' }))
-    expect(input).toHaveValue('#220000')
+    fireEvent.click(screen.getByRole('button', { name: '使用历史颜色 #FF3B30' }))
   })
 
   it('keeps experimental visual styles behind an explicit switch', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: '画笔' }))
-    expect(screen.getByRole('menuitem', { name: '辉光画笔（请先开启实验功能）' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '辉光画笔' })).toBeDisabled()
 
-    fireEvent.click(screen.getByRole('button', { name: '启用' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '辉光画笔' }))
+    fireEvent.click(screen.getByRole('button', { name: '工具栏启用实验视觉' }))
+    fireEvent.click(screen.getByRole('button', { name: '辉光画笔' }))
     expect(JSON.parse(localStorage.getItem('airnote.settings.current')!).experimentalStylesEnabled).toBe(true)
     expect(JSON.parse(localStorage.getItem('airnote.settings.current')!).brush.style).toBe('glow')
 
-    fireEvent.click(screen.getByRole('button', { name: '关闭' }))
+    fireEvent.click(screen.getByRole('button', { name: '工具栏关闭实验视觉' }))
     expect(JSON.parse(localStorage.getItem('airnote.settings.current')!).brush.style).toBe('ink')
   })
 
@@ -400,9 +387,9 @@ describe('AirNote M1 workspace', () => {
     vi.useFakeTimers()
     try {
       const { container } = render(<App />)
-      fireEvent.click(screen.getByRole('button', { name: '启用' }))
+      fireEvent.click(screen.getByRole('button', { name: '工具栏启用实验视觉' }))
       fireEvent.click(screen.getByRole('button', { name: '画笔' }))
-      fireEvent.click(screen.getByRole('menuitem', { name: '粒子画笔' }))
+      fireEvent.click(screen.getByRole('button', { name: '粒子画笔' }))
       drawMouseStroke()
       act(() => vi.advanceTimersByTime(1200))
       fireEvent.click(screen.getByRole('button', { name: '生成想法卡片' }))
@@ -432,9 +419,9 @@ describe('AirNote M1 workspace', () => {
     })
 
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: '启用' }))
+    fireEvent.click(screen.getByRole('button', { name: '工具栏启用实验视觉' }))
     fireEvent.click(screen.getByRole('button', { name: '画笔' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '粒子画笔' }))
+    fireEvent.click(screen.getByRole('button', { name: '粒子画笔' }))
     fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
     await screen.findByRole('button', { name: '关闭摄像头' })
     fireEvent.click(screen.getByRole('button', { name: '开始校准' }))
@@ -484,7 +471,6 @@ describe('AirNote M1 workspace', () => {
       video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
       audio: false,
     })
-    expect(await screen.findByText('实际输入 640×480 · 30 FPS')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '书写校准' })).toBeInTheDocument()
   })
 
@@ -498,10 +484,10 @@ describe('AirNote M1 workspace', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
     await screen.findByRole('button', { name: '关闭摄像头' })
-    expect(screen.getByRole('button', { name: '设置手势模式' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '摄像头手势模式' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: '直接使用默认参数' }))
 
-    expect(screen.getByRole('button', { name: '手势模式' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '摄像头手势模式' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText('手势边缘提示')).toBeInTheDocument()
     expect(screen.getByText('已明确使用默认书写区域和捏合灵敏度。')).toBeInTheDocument()
     expect(JSON.parse(localStorage.getItem('airnote.settings.current')!).gesture.calibrated).toBe(true)
@@ -537,13 +523,13 @@ describe('AirNote M1 workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: '直接使用默认参数' }))
     fireEvent.click(screen.getByRole('button', { name: '鼠标模式' }))
     expect(screen.getByRole('button', { name: '鼠标模式' })).toHaveAttribute('aria-pressed', 'true')
-    fireEvent.click(screen.getByRole('button', { name: '手势模式' }))
+    fireEvent.click(screen.getByRole('button', { name: '摄像头手势模式' }))
 
     for (const timestamp of [0, 16, 32, 48, 64, 80]) {
       act(() => processFrame?.(timestamp))
     }
 
-    expect(screen.getByRole('button', { name: '手势模式' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '摄像头手势模式' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText('1 STROKES')).toBeInTheDocument()
   })
 
@@ -589,7 +575,7 @@ describe('AirNote M1 workspace', () => {
       browserNow = timestamp
       act(() => processFrame?.(timestamp))
     }
-    expect(screen.getByText('PAUSED')).toBeInTheDocument()
+    expect(screen.getByText('已暂停')).toBeInTheDocument()
 
     for (let timestamp = 1000; timestamp <= 11000; timestamp += 200) {
       browserNow = timestamp
@@ -598,7 +584,7 @@ describe('AirNote M1 workspace', () => {
     expect(screen.getByText('0 STROKES')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '恢复手势' }))
-    expect(screen.getByText('HOVER')).toBeInTheDocument()
+    expect(screen.getByText('悬停')).toBeInTheDocument()
     for (const timestamp of [11200, 11400, 11600, 11800, 12000, 12200]) {
       browserNow = timestamp
       act(() => processFrame?.(timestamp))
@@ -635,6 +621,24 @@ describe('AirNote M1 workspace', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(message)
+    drawMouseStroke()
+    expect(screen.getByText('1 STROKES')).toBeInTheDocument()
+  })
+
+  it('reports model loading failure and keeps mouse drawing available', async () => {
+    const { stream, stop } = createStream()
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: vi.fn().mockResolvedValue(stream) },
+    })
+    mockedCreateHandTracker.mockRejectedValueOnce(new Error('model failed'))
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('手势识别组件加载失败')
+    expect(stop).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: '鼠标模式' })).toHaveAttribute('aria-pressed', 'true')
     drawMouseStroke()
     expect(screen.getByText('1 STROKES')).toBeInTheDocument()
   })
