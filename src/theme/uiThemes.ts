@@ -1,5 +1,18 @@
 export const UI_THEME_GROUPS = [
   {
+    id: 'dreamy',
+    label: '梦幻色',
+    description: '柔和粉紫光晕，轻盈无限画布。',
+    themes: [
+      {
+        id: 'aether',
+        name: '空灵',
+        description: '粉紫微光与晶莹质感',
+        preview: ['#A89EC3', '#FAF8FC', '#B8A8D8'],
+      },
+    ],
+  },
+  {
     id: 'bright',
     label: '明亮色',
     description: '清晰、醒目，适合需要一点活力的工作区。',
@@ -78,7 +91,7 @@ export const UI_THEME_GROUPS = [
 
 export type UiThemeId = (typeof UI_THEME_GROUPS)[number]['themes'][number]['id']
 
-export const DEFAULT_UI_THEME: UiThemeId = 'graphite'
+export const DEFAULT_UI_THEME: UiThemeId = 'aether'
 const UI_THEME_KEY = 'airnote.uiTheme'
 
 const UI_THEME_IDS = new Set<UiThemeId>(
