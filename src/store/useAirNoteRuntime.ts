@@ -130,6 +130,13 @@ export function useAirNoteRuntime() {
   const [stylePerformanceStage, setStylePerformanceStage] = useState<StylePerformanceStage>('full')
   const [reducedMotion, setReducedMotion] = useState(false)
   const [gesturePauseEnabled, setGesturePauseEnabledState] = useState(loadGesturePauseEnabled)
+  const [onboardingCompleted, setOnboardingCompleted] = useState(() => {
+    try {
+      return localStorage.getItem('airnote.onboarding.completed') === 'true'
+    } catch {
+      return false
+    }
+  })
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -869,6 +876,15 @@ export function useAirNoteRuntime() {
     setWorkspaceMessage(message)
   }, [])
 
+  const completeOnboarding = useCallback(() => {
+    setOnboardingCompleted(true)
+    try {
+      localStorage.setItem('airnote.onboarding.completed', 'true')
+    } catch {
+      // onboarding completion is optional
+    }
+  }, [])
+
   useEffect(() => {
     const media = window.matchMedia?.('(prefers-reduced-motion: reduce)')
     const publish = () => {
@@ -1001,5 +1017,7 @@ export function useAirNoteRuntime() {
     createProjectSnapshot,
     replaceProject,
     reportWorkspaceMessage,
+    onboardingCompleted,
+    completeOnboarding,
   }
 }

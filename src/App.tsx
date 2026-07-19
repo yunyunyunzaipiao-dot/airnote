@@ -3,6 +3,7 @@ import { CalibrationPanel } from './components/CalibrationPanel'
 import { CameraPreview } from './components/CameraPreview'
 import { GestureStatus } from './components/GestureStatus'
 import { LeftToolbar } from './components/LeftToolbar'
+import { OnboardingOverlay } from './components/OnboardingOverlay'
 import { TopBar } from './components/TopBar'
 import { WorkspaceCanvas } from './components/WorkspaceCanvas'
 import { exportProjectPng } from './export/pngExport'
@@ -153,6 +154,9 @@ export function App() {
         </div>
         {runtime.workspaceMessage ? (
           <p className="workspace-toast workspace-toast--visible" role="status">{runtime.workspaceMessage}</p>
+        ) : null}
+        {!runtime.onboardingCompleted ? (
+          <OnboardingOverlay onComplete={runtime.completeOnboarding} />
         ) : null}
       </div>
     </main>

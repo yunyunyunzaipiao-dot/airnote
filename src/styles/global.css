@@ -4321,6 +4321,133 @@ body {
   background: var(--primary-soft);
 }
 
+/* Onboarding overlay */
+.onboarding-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: auto;
+}
+
+.onboarding-spotlight {
+  position: fixed;
+  z-index: 101;
+  border-radius: 20px;
+  box-shadow:
+    0 0 0 4px rgba(184, 168, 216, 0.5),
+    0 0 0 9999px rgba(45, 42, 51, 0.4);
+  opacity: 0;
+  transition: top 400ms ease, left 400ms ease, width 400ms ease, height 400ms ease, opacity 300ms ease;
+  pointer-events: none;
+}
+
+.onboarding-spotlight.is-visible {
+  opacity: 1;
+}
+
+.onboarding-skip {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 102;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--ui-panel-solid);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.onboarding-skip:hover {
+  background: var(--ui-button);
+  color: var(--ink);
+}
+
+.onboarding-card {
+  position: fixed;
+  z-index: 102;
+  width: 280px;
+  padding: 20px;
+  border-radius: 20px;
+  background: var(--ui-panel-solid);
+  box-shadow: 0 12px 40px var(--ui-shadow);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 300ms ease, transform 300ms ease;
+  pointer-events: auto;
+}
+
+.onboarding-card.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.onboarding-progress {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.onboarding-progress span {
+  flex: 1 1 auto;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--ui-button-strong);
+}
+
+.onboarding-progress span.is-active {
+  background: var(--signal);
+}
+
+.onboarding-card h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.onboarding-card p {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.onboarding-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.onboarding-actions button {
+  min-height: 32px;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--ui-button);
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.onboarding-actions button:hover {
+  background: var(--ui-button-hover);
+}
+
+.onboarding-actions button.primary {
+  background: var(--signal);
+  border-color: transparent;
+  color: var(--ink);
+}
+
+.onboarding-actions button.primary:hover {
+  background: var(--frame);
+}
+
 /* Context rails hidden in new layout */
 .context-rail {
   display: none;
