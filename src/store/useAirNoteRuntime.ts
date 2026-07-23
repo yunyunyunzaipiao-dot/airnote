@@ -32,8 +32,9 @@ import {
 import { createHandTracker, type HandTracker } from '../handTracking/handTracker'
 import { startVideoFrameLoop, type VideoFrameLoop } from '../handTracking/videoFrameLoop'
 import { loadGesturePauseEnabled, saveGesturePauseEnabled } from '../persistence/gesturePauseStorage'
+import { addOrUpdateProjectIndex } from '../persistence/projectIndexStorage'
 import { loadSettings, saveSettings } from '../persistence/settingsStorage'
-import { loadWorkspace, saveWorkspace, type SaveStatus } from '../persistence/workspaceStorage'
+import { loadWorkspace, loadWorkspaceById, saveWorkspace, saveWorkspaceById, type SaveStatus } from '../persistence/workspaceStorage'
 import {
   addStrokeToCurrentGroup,
   cancelCurrentGroup,
@@ -102,12 +103,12 @@ function readyCalibration(settings: AirNoteSettings): CalibrationUiState {
   }
 }
 
-export function useAirNoteRuntime() {
+export function useAirNoteRuntime(projectId?: string) {
   const restoredRef = useRef<ReturnType<typeof loadWorkspace> | undefined>(undefined)
   const restoreErrorRef = useRef<string | null>(null)
   if (restoredRef.current === undefined) {
     try {
-      restoredRef.current = loadWorkspace()
+      restoredRef.current = projectId ? loadWorkspaceById(projectId) : loadWorkspace()
     } catch (error) {
       restoredRef.current = null
       restoreErrorRef.current = error instanceof Error ? error.message : '上次项目无法恢复。'
@@ -132,7 +133,7 @@ export function useAirNoteRuntime() {
   const [gesturePauseEnabled, setGesturePauseEnabledState] = useState(loadGesturePauseEnabled)
   const [onboardingCompleted, setOnboardingCompleted] = useState(() => {
     try {
-      return localStorage.getItem('airnote.onboarding.completed') === 'true'
+      return sessionStorage.getItem('airnote.onboarding.completed') === 'true'
     } catch {
       return false
     }
@@ -860,7 +861,11 @@ export function useAirNoteRuntime() {
     setEdgeType('undirected')
     setSaveStatus('saving')
     try {
-      saveWorkspace(projectFromDocument(document, safeSettings))
+      if (projectId) {
+        saveWorkspaceById(projectId, projectFromDocument(document, safeSettings))
+      } else {
+        saveWorkspace(projectFromDocument(document, safeSettings))
+      }
       setSaveStatus('saved')
       setWorkspaceMessage('项目已导入并保存到本地。')
     } catch (error) {
@@ -879,7 +884,7 @@ export function useAirNoteRuntime() {
   const completeOnboarding = useCallback(() => {
     setOnboardingCompleted(true)
     try {
-      localStorage.setItem('airnote.onboarding.completed', 'true')
+      sessionStorage.setItem('airnote.onboarding.completed', 'true')
     } catch {
       // onboarding completion is optional
     }
@@ -914,7 +919,19 @@ export function useAirNoteRuntime() {
     setSaveStatus('saving')
     const timer = setTimeout(() => {
       try {
-        saveWorkspace(projectFromDocument(documentRef.current, settingsRef.current))
+        const project = projectFromDocument(documentRef.current, settingsRef.current)
+        if (projectId) {
+          saveWorkspaceById(projectId, project)
+          addOrUpdateProjectIndex({
+            id: projectId,
+            name: project.workspace.name,
+            updatedAt: Date.now(),
+            strokeCount: project.strokes.length,
+            cardCount: project.cards.length,
+          })
+        } else {
+          saveWorkspace(project)
+        }
         setSaveStatus('saved')
       } catch (error) {
         setSaveStatus('error')

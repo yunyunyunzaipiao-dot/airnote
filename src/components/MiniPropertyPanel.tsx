@@ -24,8 +24,8 @@ const PRESET_COLORS = [
 export function MiniPropertyPanel({
   brush,
   experimentalStylesEnabled,
-  performanceStage,
-  reducedMotion,
+  performanceStage: _performanceStage,
+  reducedMotion: _reducedMotion,
   onChange,
   onExperimentalStylesChange,
   onClose,

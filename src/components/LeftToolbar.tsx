@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { BrushSettings, InputMode, VisualStyle, WorkspaceTool } from '../types/workspace'
+import type { BrushSettings, InputMode, WorkspaceTool } from '../types/workspace'
 import type { StylePerformanceStage } from '../drawing/canvasRenderer'
 import { BrushPopover } from './BrushPopover'
 

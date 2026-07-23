@@ -27,7 +27,7 @@ const statusLabels: Record<CameraStatus, string> = {
 
 export function CameraPreview({
   status,
-  settings,
+  settings: _settings,
   errorMessage,
   inputMode,
   canUseGesture,

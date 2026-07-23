@@ -3,9 +3,46 @@ import { DEFAULT_SETTINGS, type AirNoteProject, type AirNoteSettings, type Works
 export const WORKSPACE_STORAGE_KEY = 'airnote.workspace.current'
 export const CORRUPT_WORKSPACE_KEY = 'airnote.workspace.corrupt'
 
+export function workspaceKeyFor(id: string) {
+  return `airnote.workspace.${id}`
+}
+
+export function loadWorkspaceById(id: string, storage: StorageLike = localStorage): { document: WorkspaceDocument; settings: AirNoteSettings } | null {
+  const raw = storage.getItem(workspaceKeyFor(id))
+  if (!raw) return null
+  try {
+    const validation = validateProjectDetailed(JSON.parse(raw) as unknown)
+    if (!validation.ok) throw new Error('invalid project')
+    const { schemaVersion: _schemaVersion, settings, ...document } = validation.project
+    return { document, settings: { ...settings, inputMode: 'mouse' } }
+  } catch {
+    throw new Error('项目无法恢复，可导入备份JSON。')
+  }
+}
+
+export function saveWorkspaceById(id: string, project: AirNoteProject, storage: StorageLike = localStorage) {
+  if (!validateProject(project)) throw new Error('项目数据校验失败，未写入本地存储。')
+  storage.setItem(workspaceKeyFor(id), JSON.stringify(project))
+}
+
+export function deleteWorkspaceById(id: string, storage: StorageLike = localStorage) {
+  storage.removeItem(workspaceKeyFor(id))
+}
+
+export function listWorkspaceIds(storage: StorageLike = localStorage): string[] {
+  const ids: string[] = []
+  for (let i = 0; i < storage.length; i += 1) {
+    const key = storage.key(i)
+    if (key?.startsWith('airnote.workspace.') && key !== WORKSPACE_STORAGE_KEY && key !== CORRUPT_WORKSPACE_KEY) {
+      ids.push(key.slice('airnote.workspace.'.length))
+    }
+  }
+  return ids
+}
+
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
-type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
+type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem' | 'length' | 'key'>
 
 export type ProjectValidationFailure =
   | { reason: 'invalid-format'; damagedObjectCount: 0 }

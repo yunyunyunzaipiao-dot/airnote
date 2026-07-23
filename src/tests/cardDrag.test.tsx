@@ -37,6 +37,7 @@ describe('CARD-02 card drag preview', () => {
         }]}
         edges={[]}
         currentGroup={null}
+        zoom={1}
         calibration={{
           phase: 'ready',
           roiStep: 4,
