@@ -16,10 +16,10 @@ interface LeftToolbarProps {
   onGesturePauseEnabledChange: (enabled: boolean) => void
   onExperimentalStylesChange: (enabled: boolean) => void
   onUpdateBrush: (brush: BrushSettings) => void
-  onInsertImage: () => void
+  onCreateTextCard: () => void
 }
 
-type IconName = 'pointer' | 'lasso' | 'rect' | 'free' | 'pen' | 'hand' | 'palm' | 'image' | 'star'
+type IconName = 'pointer' | 'lasso' | 'rect' | 'free' | 'pen' | 'eraser' | 'pan' | 'text' | 'hand' | 'palm' | 'star'
 
 function ToolIcon({ name }: { name: IconName }) {
   if (name === 'pointer') {
@@ -43,8 +43,14 @@ function ToolIcon({ name }: { name: IconName }) {
   if (name === 'palm') {
     return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11v8" /><path d="M8 10.5V15" /><path d="M16 10.5V15" /><path d="M20 12.5V16" /><path d="M4 12.5V16" /><circle cx="12" cy="5" r="2" /><circle cx="8" cy="7" r="1.5" /><circle cx="16" cy="7" r="1.5" /><circle cx="4" cy="10" r="1.5" /><circle cx="20" cy="10" r="1.5" /></svg>
   }
-  if (name === 'image') {
-    return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></svg>
+  if (name === 'eraser') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l9-12 8 6-7 9H7z" /><path d="M11 20h10" /></svg>
+  }
+  if (name === 'pan') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 11V6a2 2 0 014 0v4-6a2 2 0 014 0v6-4a2 2 0 014 0v8c0 5-3 8-8 8-4 0-6-2-8-6l-1-3a2 2 0 013-2l2 2V8a2 2 0 014 0" /></svg>
+  }
+  if (name === 'text') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M12 5v14M8 19h8" /></svg>
   }
   if (name === 'star') {
     return <svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
@@ -65,7 +71,7 @@ export function LeftToolbar({
   onGesturePauseEnabledChange,
   onExperimentalStylesChange,
   onUpdateBrush,
-  onInsertImage,
+  onCreateTextCard,
 }: LeftToolbarProps) {
   const [openMenu, setOpenMenu] = useState<'lasso' | null>(null)
   const [brushPopoverOpen, setBrushPopoverOpen] = useState(false)
@@ -167,13 +173,35 @@ export function LeftToolbar({
         </div>
 
         <button
+          className={`tool-action tool-action--icon ${tool === 'erase' ? 'tool-action--active' : ''}`}
+          type="button"
+          aria-label="整笔橡皮擦"
+          title="整笔橡皮擦"
+          aria-pressed={tool === 'erase'}
+          onClick={() => chooseTool('erase')}
+        >
+          <ToolIcon name="eraser" />
+        </button>
+
+        <button
+          className={`tool-action tool-action--icon ${tool === 'pan' ? 'tool-action--active' : ''}`}
+          type="button"
+          aria-label="平移画布"
+          title="平移画布"
+          aria-pressed={tool === 'pan'}
+          onClick={() => chooseTool('pan')}
+        >
+          <ToolIcon name="pan" />
+        </button>
+
+        <button
           className="tool-action tool-action--icon"
           type="button"
-          aria-label="插入图片"
-          title="插入图片"
-          onClick={onInsertImage}
+          aria-label="新建文字卡片"
+          title="新建文字卡片"
+          onClick={onCreateTextCard}
         >
-          <ToolIcon name="image" />
+          <ToolIcon name="text" />
         </button>
 
         <button

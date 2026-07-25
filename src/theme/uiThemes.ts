@@ -91,7 +91,7 @@ export const UI_THEME_GROUPS = [
 
 export type UiThemeId = (typeof UI_THEME_GROUPS)[number]['themes'][number]['id']
 
-export const DEFAULT_UI_THEME: UiThemeId = 'aether'
+export const DEFAULT_UI_THEME: UiThemeId = 'white'
 const UI_THEME_KEY = 'airnote.uiTheme'
 
 const UI_THEME_IDS = new Set<UiThemeId>(

@@ -32,25 +32,30 @@ import {
 import { createHandTracker, type HandTracker } from '../handTracking/handTracker'
 import { startVideoFrameLoop, type VideoFrameLoop } from '../handTracking/videoFrameLoop'
 import { loadGesturePauseEnabled, saveGesturePauseEnabled } from '../persistence/gesturePauseStorage'
-import { addOrUpdateProjectIndex } from '../persistence/projectIndexStorage'
 import { loadSettings, saveSettings } from '../persistence/settingsStorage'
-import { loadWorkspace, loadWorkspaceById, saveWorkspace, saveWorkspaceById, type SaveStatus } from '../persistence/workspaceStorage'
+import { loadWorkspace, saveWorkspace, type SaveStatus } from '../persistence/workspaceStorage'
 import {
   addStrokeToCurrentGroup,
   cancelCurrentGroup,
   continueCurrentGroup,
   createCardFromCurrentGroup,
   createEdge,
+  createTextCard,
   createWorkspaceDocument,
   deleteCard,
+  eraseStroke,
   moveCard,
+  moveCards,
   projectFromDocument,
   renameCard,
   resizeCard,
+  strokeIdAtPoint,
   suggestGroupFromSelection,
   suggestCurrentGroup,
   touch,
+  updateTextCard,
   updateEdgeType,
+  updateViewport,
 } from './workspaceDocument'
 import type { CameraErrorCode, M0UiState, NormalizedPoint, RuntimeDiagnostics } from '../types/m0'
 import {
@@ -62,6 +67,7 @@ import {
   type EdgeAnchor,
   type InputMode,
   type Stroke,
+  type TextCardStyle,
   type WorkspaceDocument,
   type WorkspaceTool,
 } from '../types/workspace'
@@ -103,12 +109,12 @@ function readyCalibration(settings: AirNoteSettings): CalibrationUiState {
   }
 }
 
-export function useAirNoteRuntime(projectId?: string) {
+export function useAirNoteRuntime() {
   const restoredRef = useRef<ReturnType<typeof loadWorkspace> | undefined>(undefined)
   const restoreErrorRef = useRef<string | null>(null)
   if (restoredRef.current === undefined) {
     try {
-      restoredRef.current = projectId ? loadWorkspaceById(projectId) : loadWorkspace()
+      restoredRef.current = loadWorkspace()
     } catch (error) {
       restoredRef.current = null
       restoreErrorRef.current = error instanceof Error ? error.message : '上次项目无法恢复。'
@@ -131,13 +137,6 @@ export function useAirNoteRuntime(projectId?: string) {
   const [stylePerformanceStage, setStylePerformanceStage] = useState<StylePerformanceStage>('full')
   const [reducedMotion, setReducedMotion] = useState(false)
   const [gesturePauseEnabled, setGesturePauseEnabledState] = useState(loadGesturePauseEnabled)
-  const [onboardingCompleted, setOnboardingCompleted] = useState(() => {
-    try {
-      return sessionStorage.getItem('airnote.onboarding.completed') === 'true'
-    } catch {
-      return false
-    }
-  })
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -775,6 +774,44 @@ export function useAirNoteRuntime(projectId?: string) {
     setToolState('select')
   }, [applyDocument, publishHistory])
 
+  const addTextCard = useCallback(() => {
+    const before = documentRef.current
+    const viewport = before.workspace.viewport
+    const after = createTextCard(before, {
+      x: Math.max(24, (160 - viewport.x) / viewport.zoom),
+      y: Math.max(24, (120 - viewport.y) / viewport.zoom),
+    })
+    applyDocument(after)
+    publishHistory(pushHistory(historyRef.current, { type: 'CREATE_TEXT_CARD', before, after }))
+    setToolState('select')
+  }, [applyDocument, publishHistory])
+
+  const commitTextCardUpdate = useCallback((
+    cardId: string,
+    patch: { content?: string; textStyle?: Partial<TextCardStyle> },
+  ) => {
+    const before = documentRef.current
+    const after = updateTextCard(before, cardId, patch)
+    if (after === before) return
+    applyDocument(after)
+    publishHistory(pushHistory(historyRef.current, { type: 'UPDATE_TEXT_CARD', before, after }))
+  }, [applyDocument, publishHistory])
+
+  const eraseStrokeAtPoint = useCallback((point: { x: number; y: number }) => {
+    const before = documentRef.current
+    const strokeId = strokeIdAtPoint(before, point)
+    if (!strokeId) return false
+    const after = eraseStroke(before, strokeId)
+    if (after === before) return false
+    applyDocument(after)
+    publishHistory(pushHistory(historyRef.current, { type: 'ERASE_STROKE', before, after }))
+    return true
+  }, [applyDocument, publishHistory])
+
+  const setViewport = useCallback((viewport: Partial<WorkspaceDocument['workspace']['viewport']>) => {
+    applyDocument(updateViewport(documentRef.current, viewport))
+  }, [applyDocument])
+
   const commitCardMove = useCallback((cardId: string, x: number, y: number, stage: { width: number; height: number }) => {
     const before = documentRef.current
     const after = moveCard(before, cardId, x, y, stage)
@@ -783,6 +820,17 @@ export function useAirNoteRuntime(projectId?: string) {
     if (!oldCard || !newCard || (oldCard.position.x === newCard.position.x && oldCard.position.y === newCard.position.y)) return
     applyDocument(after)
     publishHistory(pushHistory(historyRef.current, { type: 'MOVE_CARD', before, after }))
+  }, [applyDocument, publishHistory])
+
+  const commitCardsMove = useCallback((
+    moves: Array<{ cardId: string; x: number; y: number }>,
+    stage: { width: number; height: number },
+  ) => {
+    const before = documentRef.current
+    const after = moveCards(before, moves, stage)
+    if (after === before) return
+    applyDocument(after)
+    publishHistory(pushHistory(historyRef.current, { type: 'MOVE_CARDS', before, after }))
   }, [applyDocument, publishHistory])
 
   const commitCardResize = useCallback((cardId: string, geometry: CardGeometry, stage: { width: number; height: number }) => {
@@ -813,8 +861,9 @@ export function useAirNoteRuntime(projectId?: string) {
 
   const commitCardDelete = useCallback((cardId: string) => {
     const before = documentRef.current
+    const strokeCount = before.strokes.filter((stroke) => stroke.cardId === cardId).length
     const edgeCount = before.edges.filter((edge) => edge.sourceCardId === cardId || edge.targetCardId === cardId).length
-    if (edgeCount > 0 && !window.confirm(`删除卡片将同时删除${edgeCount}条连接线。`)) return
+    if (!window.confirm(`删除卡片将同时删除${strokeCount}条笔迹和${edgeCount}条连接线。此操作可撤销。`)) return
     const after = deleteCard(before, cardId)
     applyDocument(after)
     publishHistory(pushHistory(historyRef.current, { type: 'DELETE_CARD', before, after }))
@@ -861,11 +910,7 @@ export function useAirNoteRuntime(projectId?: string) {
     setEdgeType('undirected')
     setSaveStatus('saving')
     try {
-      if (projectId) {
-        saveWorkspaceById(projectId, projectFromDocument(document, safeSettings))
-      } else {
-        saveWorkspace(projectFromDocument(document, safeSettings))
-      }
+      saveWorkspace(projectFromDocument(document, safeSettings))
       setSaveStatus('saved')
       setWorkspaceMessage('项目已导入并保存到本地。')
     } catch (error) {
@@ -879,15 +924,6 @@ export function useAirNoteRuntime(projectId?: string) {
 
   const reportWorkspaceMessage = useCallback((message: string | null) => {
     setWorkspaceMessage(message)
-  }, [])
-
-  const completeOnboarding = useCallback(() => {
-    setOnboardingCompleted(true)
-    try {
-      sessionStorage.setItem('airnote.onboarding.completed', 'true')
-    } catch {
-      // onboarding completion is optional
-    }
   }, [])
 
   useEffect(() => {
@@ -920,18 +956,7 @@ export function useAirNoteRuntime(projectId?: string) {
     const timer = setTimeout(() => {
       try {
         const project = projectFromDocument(documentRef.current, settingsRef.current)
-        if (projectId) {
-          saveWorkspaceById(projectId, project)
-          addOrUpdateProjectIndex({
-            id: projectId,
-            name: project.workspace.name,
-            updatedAt: Date.now(),
-            strokeCount: project.strokes.length,
-            cardCount: project.cards.length,
-          })
-        } else {
-          saveWorkspace(project)
-        }
+        saveWorkspace(project)
         setSaveStatus('saved')
       } catch (error) {
         setSaveStatus('error')
@@ -1025,7 +1050,12 @@ export function useAirNoteRuntime(projectId?: string) {
     cancelGroup,
     suggestSelectionGroup,
     generateCard,
+    addTextCard,
+    commitTextCardUpdate,
+    eraseStrokeAtPoint,
+    setViewport,
     commitCardMove,
+    commitCardsMove,
     commitCardResize,
     commitCardRename,
     commitCardDelete,
@@ -1034,7 +1064,5 @@ export function useAirNoteRuntime(projectId?: string) {
     createProjectSnapshot,
     replaceProject,
     reportWorkspaceMessage,
-    onboardingCompleted,
-    completeOnboarding,
   }
 }

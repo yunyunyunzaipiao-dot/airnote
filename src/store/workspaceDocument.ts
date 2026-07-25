@@ -5,6 +5,7 @@ import type {
   Edge,
   EdgeAnchor,
   IdeaCard,
+  TextCardStyle,
   Stroke,
   StrokeGroup,
   WorkspaceDocument,
@@ -113,6 +114,7 @@ export function createCardFromCurrentGroup(document: WorkspaceDocument): Workspa
   const cardId = createId('card')
   const card: IdeaCard = {
     id: cardId,
+    kind: 'ink',
     strokeIds: strokes.map((stroke) => stroke.id),
     title: '未命名想法',
     position: { x: bounds.x - padding, y: bounds.y - padding - 38 },
@@ -129,12 +131,77 @@ export function createCardFromCurrentGroup(document: WorkspaceDocument): Workspa
   })
 }
 
+export const DEFAULT_TEXT_CARD_STYLE: TextCardStyle = {
+  bold: false,
+  italic: false,
+  underline: false,
+  color: '#172B3A',
+}
+
+export function createTextCard(
+  document: WorkspaceDocument,
+  position: { x: number; y: number } = { x: 180, y: 140 },
+) {
+  const card: IdeaCard = {
+    id: createId('card'),
+    kind: 'text',
+    title: '未命名文字',
+    content: '',
+    textStyle: { ...DEFAULT_TEXT_CARD_STYLE },
+    position,
+    size: { width: 280, height: 180 },
+  }
+  return touch({ ...document, cards: [...document.cards, card] })
+}
+
+export function updateTextCard(
+  document: WorkspaceDocument,
+  cardId: string,
+  patch: { content?: string; textStyle?: Partial<TextCardStyle> },
+) {
+  const color = patch.textStyle?.color
+  const safeColor = color && /^#[0-9a-f]{6}$/i.test(color) ? color : undefined
+  return touch({
+    ...document,
+    cards: document.cards.map((card) => card.id === cardId && card.kind === 'text'
+      ? {
+          ...card,
+          content: patch.content === undefined ? card.content : patch.content.slice(0, 5000),
+          textStyle: {
+            ...card.textStyle,
+            ...patch.textStyle,
+            ...(safeColor ? { color: safeColor } : color ? { color: DEFAULT_TEXT_CARD_STYLE.color } : {}),
+          },
+        }
+      : card),
+  })
+}
+
 export function moveCard(document: WorkspaceDocument, cardId: string, x: number, y: number, stage: { width: number; height: number }) {
   const card = document.cards.find((item) => item.id === cardId)
   if (!card) return document
   const nextX = Math.min(stage.width - 24, Math.max(24 - card.size.width, x))
   const nextY = Math.min(stage.height - 24, Math.max(24 - card.size.height, y))
   return touch({ ...document, cards: document.cards.map((item) => item.id === cardId ? { ...item, position: { x: nextX, y: nextY } } : item) })
+}
+
+export function moveCards(
+  document: WorkspaceDocument,
+  moves: Array<{ cardId: string; x: number; y: number }>,
+  stage: { width: number; height: number },
+) {
+  const moveById = new Map(moves.map((move) => [move.cardId, move]))
+  let changed = false
+  const cards = document.cards.map((card) => {
+    const move = moveById.get(card.id)
+    if (!move || ![move.x, move.y, stage.width, stage.height].every(Number.isFinite)) return card
+    const x = Math.min(stage.width - 24, Math.max(24 - card.size.width, move.x))
+    const y = Math.min(stage.height - 24, Math.max(24 - card.size.height, move.y))
+    if (x === card.position.x && y === card.position.y) return card
+    changed = true
+    return { ...card, position: { x, y } }
+  })
+  return changed ? touch({ ...document, cards }) : document
 }
 
 export const MIN_CARD_SIZE = { width: 120, height: 96 }
@@ -170,18 +237,76 @@ export function resizeCard(
 }
 
 export function renameCard(document: WorkspaceDocument, cardId: string, title: string) {
-  const normalized = title.trim().slice(0, 100) || '未命名想法'
-  return touch({ ...document, cards: document.cards.map((card) => card.id === cardId ? { ...card, title: normalized } : card) })
+  const card = document.cards.find((item) => item.id === cardId)
+  if (!card) return document
+  const normalized = title.trim().slice(0, 100) || (card.kind === 'text' ? '未命名文字' : '未命名想法')
+  if (normalized === card.title) return document
+  return touch({ ...document, cards: document.cards.map((item) => item.id === cardId ? { ...item, title: normalized } : item) })
 }
 
 export function deleteCard(document: WorkspaceDocument, cardId: string) {
+  const deletedStrokeIds = new Set(
+    document.strokes.filter((stroke) => stroke.cardId === cardId).map((stroke) => stroke.id),
+  )
   return touch({
     ...document,
     cards: document.cards.filter((card) => card.id !== cardId),
     edges: document.edges.filter((edge) => edge.sourceCardId !== cardId && edge.targetCardId !== cardId),
-    strokes: document.strokes.map((stroke) => stroke.cardId === cardId ? { ...stroke, cardId: undefined } : stroke),
-    groups: document.groups.filter((group) => !group.strokeIds.some((strokeId) => document.strokes.find((stroke) => stroke.id === strokeId)?.cardId === cardId)),
+    strokes: document.strokes.filter((stroke) => !deletedStrokeIds.has(stroke.id)),
+    groups: document.groups
+      .map((group) => ({ ...group, strokeIds: group.strokeIds.filter((strokeId) => !deletedStrokeIds.has(strokeId)) }))
+      .filter((group) => group.strokeIds.length > 0),
   })
+}
+
+function distanceToSegment(
+  point: { x: number; y: number },
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+) {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  if (dx === 0 && dy === 0) return Math.hypot(point.x - start.x, point.y - start.y)
+  const ratio = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy)))
+  return Math.hypot(point.x - (start.x + ratio * dx), point.y - (start.y + ratio * dy))
+}
+
+export function strokeIdAtPoint(
+  document: WorkspaceDocument,
+  point: { x: number; y: number },
+  tolerance = 10,
+) {
+  return [...document.strokes].reverse().find((stroke) => {
+    if (stroke.cardId || stroke.points.length === 0) return false
+    const hitRadius = Math.max(tolerance, stroke.width / 2 + 4)
+    if (stroke.points.length === 1) {
+      return Math.hypot(point.x - stroke.points[0].x, point.y - stroke.points[0].y) <= hitRadius
+    }
+    return stroke.points.slice(1).some((end, index) => distanceToSegment(point, stroke.points[index], end) <= hitRadius)
+  })?.id ?? null
+}
+
+export function eraseStroke(document: WorkspaceDocument, strokeId: string) {
+  const stroke = document.strokes.find((item) => item.id === strokeId)
+  if (!stroke || stroke.cardId) return document
+  return touch({
+    ...document,
+    strokes: document.strokes.filter((item) => item.id !== strokeId),
+    groups: document.groups
+      .map((group) => ({ ...group, strokeIds: group.strokeIds.filter((id) => id !== strokeId) }))
+      .filter((group) => group.strokeIds.length > 0),
+  })
+}
+
+export function updateViewport(
+  document: WorkspaceDocument,
+  viewport: Partial<WorkspaceDocument['workspace']['viewport']>,
+) {
+  const current = document.workspace.viewport
+  const zoom = Number.isFinite(viewport.zoom) ? Math.min(3, Math.max(0.25, viewport.zoom!)) : current.zoom
+  const x = Number.isFinite(viewport.x) ? viewport.x! : current.x
+  const y = Number.isFinite(viewport.y) ? viewport.y! : current.y
+  return touch({ ...document, workspace: { ...document.workspace, viewport: { x, y, zoom } } })
 }
 
 export function createEdge(
@@ -238,5 +363,5 @@ export function touch(document: WorkspaceDocument): WorkspaceDocument {
 }
 
 export function projectFromDocument(document: WorkspaceDocument, settings: AirNoteSettings) {
-  return { schemaVersion: 1 as const, ...document, settings }
+  return { schemaVersion: 2 as const, ...document, settings }
 }

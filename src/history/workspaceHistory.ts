@@ -4,8 +4,12 @@ export const HISTORY_LIMIT = 50
 
 export type WorkspaceCommandType =
   | 'ADD_STROKE'
+  | 'ERASE_STROKE'
   | 'CREATE_CARD'
+  | 'CREATE_TEXT_CARD'
+  | 'UPDATE_TEXT_CARD'
   | 'MOVE_CARD'
+  | 'MOVE_CARDS'
   | 'RESIZE_CARD'
   | 'RENAME_CARD'
   | 'DELETE_CARD'

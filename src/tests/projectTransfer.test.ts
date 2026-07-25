@@ -5,6 +5,7 @@ import { DEFAULT_SETTINGS, type AirNoteProject, type Edge, type IdeaCard, type S
 function largeProject(): AirNoteProject {
   const cards: IdeaCard[] = Array.from({ length: 10 }, (_, cardIndex) => ({
     id: `card-${cardIndex}`,
+    kind: 'ink',
     strokeIds: Array.from({ length: 10 }, (_, offset) => `stroke-${cardIndex * 10 + offset}`),
     title: `想法 ${cardIndex + 1}`,
     position: { x: cardIndex * 180, y: (cardIndex % 2) * 220 },
@@ -28,7 +29,7 @@ function largeProject(): AirNoteProject {
     targetAnchor: 'left',
   }))
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     workspace: {
       id: 'workspace-1',
       name: '往返验收',
@@ -65,7 +66,7 @@ describe('SAVE-02 project JSON transfer', () => {
     expect(invalid).toMatchObject({ ok: false, error: { reason: 'invalid-format' } })
     expect(invalid.ok ? '' : invalid.message).toBe('项目文件格式不正确，当前画布未被修改。')
 
-    const newer = parseProjectJson(JSON.stringify({ schemaVersion: 2 }))
+    const newer = parseProjectJson(JSON.stringify({ schemaVersion: 3 }))
     expect(newer).toMatchObject({ ok: false, error: { reason: 'version-too-new' } })
     expect(newer.ok ? '' : newer.message).toBe('该项目由更高版本AirNote创建，当前版本无法打开。')
   })

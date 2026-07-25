@@ -1,5 +1,4 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
 import { createHandTracker } from '../handTracking/handTracker'
@@ -19,14 +18,13 @@ vi.mock('../handTracking/videoFrameLoop', () => ({
 const mockedCreateHandTracker = vi.mocked(createHandTracker)
 const mockedStartVideoFrameLoop = vi.mocked(startVideoFrameLoop)
 
-const TEST_WORKSPACE_ID = 'test-workspace'
+function renderApp() {
+  return render(<App />)
+}
 
-function renderApp(path = `/workspace/${TEST_WORKSPACE_ID}`) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <App />
-    </MemoryRouter>,
-  )
+function confirmCameraConsent() {
+  fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
+  fireEvent.click(screen.getByRole('button', { name: '继续启用摄像头' }))
 }
 
 function createStream() {
@@ -98,6 +96,7 @@ describe('AirNote M1 workspace', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     localStorage.clear()
+    localStorage.setItem('airnote-onboarding-done', '1')
     mockedCreateHandTracker.mockResolvedValue({ detect: vi.fn(), close: vi.fn() })
     mockedStartVideoFrameLoop.mockReturnValue({ stop: vi.fn() })
     Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true })
@@ -119,6 +118,81 @@ describe('AirNote M1 workspace', () => {
     expect(screen.getByRole('heading', { name: '鼠标画笔已启用' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '启用张掌暂停' })).toHaveAttribute('aria-pressed', 'false')
     expect(getUserMedia).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: '跳过引导' })).not.toBeInTheDocument()
+  })
+
+  it('shows the six-step onboarding only on first open and never requests camera permission', () => {
+    localStorage.removeItem('airnote-onboarding-done')
+    const getUserMedia = vi.fn()
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } })
+
+    const firstRender = renderApp()
+    expect(screen.getByRole('dialog', { name: '欢迎使用空书' })).toBeInTheDocument()
+    expect(screen.getByText('1 / 6')).toBeInTheDocument()
+    expect(getUserMedia).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '前往第 6 步：现在可以开始了' }))
+    expect(screen.getByText('6 / 6')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '开始使用' }))
+    expect(localStorage.getItem('airnote-onboarding-done')).toBe('1')
+    expect(screen.queryByRole('dialog', { name: '现在可以开始了' })).not.toBeInTheDocument()
+
+    firstRender.unmount()
+    renderApp()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(getUserMedia).not.toHaveBeenCalled()
+  })
+
+  it('creates a basic text card and applies whole-card formatting', () => {
+    renderApp()
+    fireEvent.click(screen.getByRole('button', { name: '新建文字卡片' }))
+    const body = screen.getByRole('textbox', { name: '编辑文字卡片 未命名文字' })
+    fireEvent.change(body, { target: { value: '一条文字想法' } })
+    fireEvent.blur(body)
+    fireEvent.click(screen.getByRole('button', { name: 'B' }))
+    expect(screen.getByText('1 CARDS / 0 EDGES')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'B' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('uses the eraser to remove one whole free Stroke and supports undo', () => {
+    renderApp()
+    drawMouseStroke()
+    fireEvent.click(screen.getByRole('button', { name: '整笔橡皮擦' }))
+    const canvas = screen.getByLabelText('鼠标绘图画布')
+    fireEvent.pointerDown(canvas, { pointerId: 4, button: 0, clientX: 20, clientY: 20 })
+    fireEvent.pointerUp(canvas, { pointerId: 4, clientX: 20, clientY: 20 })
+    expect(screen.getByText('0 STROKES')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '撤销' }))
+    expect(screen.getByText('1 STROKES')).toBeInTheDocument()
+  })
+
+  it('supports the full 25%–300% zoom range', () => {
+    renderApp()
+    const decrease = screen.getByRole('button', { name: '缩小' })
+    for (let index = 0; index < 4; index += 1) fireEvent.click(decrease)
+    expect(screen.getByRole('button', { name: '重置缩放' })).toHaveTextContent('25%')
+    const increase = screen.getByRole('button', { name: '放大' })
+    for (let index = 0; index < 12; index += 1) fireEvent.click(increase)
+    expect(screen.getByRole('button', { name: '重置缩放' })).toHaveTextContent('300%')
+  })
+
+  it('deletes a card together with its Stroke and restores both with one undo', () => {
+    vi.useFakeTimers()
+    try {
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      renderApp()
+      drawMouseStroke()
+      act(() => vi.advanceTimersByTime(1200))
+      fireEvent.click(screen.getByRole('button', { name: '生成想法卡片' }))
+      fireEvent.click(screen.getByRole('button', { name: '删除卡片 未命名想法' }))
+      expect(screen.getByText('0 STROKES')).toBeInTheDocument()
+      expect(screen.getByText('0 CARDS / 0 EDGES')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: '撤销' }))
+      expect(screen.getByText('1 STROKES')).toBeInTheDocument()
+      expect(screen.getByText('1 CARDS / 0 EDGES')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('keeps GEST-02 behind a local experimental switch', () => {
@@ -339,9 +413,9 @@ describe('AirNote M1 workspace', () => {
 
     fireEvent.change(fileInput, { target: { files: [projectFile] } })
     await waitFor(() => expect(screen.getByText('2 STROKES')).toBeInTheDocument())
-    expect(screen.getByRole('status')).toHaveTextContent('项目已导入并保存到本地。')
-    expect(JSON.parse(localStorage.getItem(`airnote.workspace.${TEST_WORKSPACE_ID}`)!).strokes).toHaveLength(2)
-    expect(JSON.parse(localStorage.getItem(`airnote.workspace.${TEST_WORKSPACE_ID}`)!).settings.inputMode).toBe('mouse')
+    expect(screen.getAllByText('项目已导入并保存到本地。').length).toBeGreaterThan(0)
+    expect(JSON.parse(localStorage.getItem('airnote.workspace.current')!).strokes).toHaveLength(2)
+    expect(JSON.parse(localStorage.getItem('airnote.workspace.current')!).settings.inputMode).toBe('mouse')
     expect(confirm).toHaveBeenCalledWith('导入项目将替换当前画布。是否继续？')
   })
 
@@ -433,7 +507,7 @@ describe('AirNote M1 workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: '工具栏启用实验视觉' }))
     fireEvent.click(screen.getByRole('button', { name: '画笔' }))
     fireEvent.click(screen.getByRole('button', { name: '粒子画笔' }))
-    fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
+    confirmCameraConsent()
     await screen.findByRole('button', { name: '关闭摄像头' })
     fireEvent.click(screen.getByRole('button', { name: '开始校准' }))
 
@@ -476,6 +550,9 @@ describe('AirNote M1 workspace', () => {
 
     renderApp()
     fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
+    expect(getUserMedia).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: '启用摄像头进行手势绘制' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '继续启用摄像头' }))
 
     await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(1))
     expect(getUserMedia).toHaveBeenCalledWith({
@@ -493,7 +570,7 @@ describe('AirNote M1 workspace', () => {
     })
 
     renderApp()
-    fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
+    confirmCameraConsent()
     await screen.findByRole('button', { name: '关闭摄像头' })
     expect(screen.getByRole('button', { name: '摄像头手势模式' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: '直接使用默认参数' }))
@@ -529,7 +606,7 @@ describe('AirNote M1 workspace', () => {
     })
 
     renderApp()
-    fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
+    confirmCameraConsent()
     await screen.findByRole('button', { name: '关闭摄像头' })
     fireEvent.click(screen.getByRole('button', { name: '直接使用默认参数' }))
     fireEvent.click(screen.getByRole('button', { name: '鼠标模式' }))
@@ -578,7 +655,7 @@ describe('AirNote M1 workspace', () => {
 
     renderApp()
     fireEvent.click(screen.getByRole('button', { name: '启用张掌暂停' }))
-    fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
+    confirmCameraConsent()
     await screen.findByRole('button', { name: '关闭摄像头' })
     fireEvent.click(screen.getByRole('button', { name: '直接使用默认参数' }))
 
@@ -611,7 +688,7 @@ describe('AirNote M1 workspace', () => {
     })
 
     renderApp()
-    fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
+    confirmCameraConsent()
     fireEvent.click(await screen.findByRole('button', { name: '关闭摄像头' }))
 
     expect(stop).toHaveBeenCalledTimes(1)
@@ -630,7 +707,7 @@ describe('AirNote M1 workspace', () => {
     })
 
     renderApp()
-    fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
+    confirmCameraConsent()
     expect(await screen.findByRole('alert')).toHaveTextContent(message)
     drawMouseStroke()
     expect(screen.getByText('1 STROKES')).toBeInTheDocument()
@@ -645,7 +722,7 @@ describe('AirNote M1 workspace', () => {
     mockedCreateHandTracker.mockRejectedValueOnce(new Error('model failed'))
 
     renderApp()
-    fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
+    confirmCameraConsent()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('手势识别组件加载失败')
     expect(stop).toHaveBeenCalledTimes(1)
@@ -672,7 +749,7 @@ describe('AirNote M1 workspace', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
     renderApp()
-    fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
+    confirmCameraConsent()
     await screen.findByRole('button', { name: '关闭摄像头' })
     act(() => processFrame?.(100))
 

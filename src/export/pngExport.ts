@@ -116,7 +116,37 @@ function drawCardInk(context: CanvasRenderingContext2D, card: IdeaCard, strokes:
   context.restore()
 }
 
-export function renderProjectPng(project: AirNoteProject, canvas: HTMLCanvasElement) {
+export type ProjectImageFormat = 'png' | 'jpg'
+
+function drawWrappedText(
+  context: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  maxY: number,
+) {
+  let line = ''
+  let cursorY = y
+  for (const character of text) {
+    if (character === '\n' || context.measureText(line + character).width > maxWidth) {
+      if (line) context.fillText(line, x, cursorY)
+      cursorY += lineHeight
+      line = character === '\n' ? '' : character
+      if (cursorY > maxY) return
+    } else {
+      line += character
+    }
+  }
+  if (line && cursorY <= maxY) context.fillText(line, x, cursorY)
+}
+
+export function renderProjectImage(
+  project: AirNoteProject,
+  canvas: HTMLCanvasElement,
+  format: ProjectImageFormat = 'png',
+) {
   const bounds = calculateExportBounds(project)
   const exportScale = Math.min(1, MAX_EXPORT_DIMENSION / Math.max(bounds.width, bounds.height))
   canvas.width = Math.max(1, Math.ceil(bounds.width * exportScale))
@@ -124,24 +154,12 @@ export function renderProjectPng(project: AirNoteProject, canvas: HTMLCanvasElem
   const context = canvas.getContext('2d')
   if (!context) throw new Error('当前浏览器无法创建图片画布。')
 
-  context.fillStyle = '#f6f1e4'
-  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.clearRect(0, 0, canvas.width, canvas.height)
+  if (format === 'jpg') {
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+  }
   context.setTransform(exportScale, 0, 0, exportScale, -bounds.x * exportScale, -bounds.y * exportScale)
-
-  context.strokeStyle = 'rgba(19, 33, 38, 0.12)'
-  context.lineWidth = 1
-  for (let x = Math.floor(bounds.x / 32) * 32; x <= bounds.x + bounds.width; x += 32) {
-    context.beginPath()
-    context.moveTo(x, bounds.y)
-    context.lineTo(x, bounds.y + bounds.height)
-    context.stroke()
-  }
-  for (let y = Math.floor(bounds.y / 32) * 32; y <= bounds.y + bounds.height; y += 32) {
-    context.beginPath()
-    context.moveTo(bounds.x, y)
-    context.lineTo(bounds.x + bounds.width, y)
-    context.stroke()
-  }
 
   project.strokes
     .filter((stroke) => !stroke.cardId)
@@ -172,7 +190,25 @@ export function renderProjectPng(project: AirNoteProject, canvas: HTMLCanvasElem
   for (const card of project.cards) {
     context.fillStyle = '#fffdf5'
     context.fillRect(card.position.x, card.position.y, card.size.width, card.size.height)
-    drawCardInk(context, card, project.strokes.filter((stroke) => card.strokeIds.includes(stroke.id)), project.settings.experimentalStylesEnabled)
+    if (card.kind === 'ink') {
+      drawCardInk(context, card, project.strokes.filter((stroke) => card.strokeIds.includes(stroke.id)), project.settings.experimentalStylesEnabled)
+    } else {
+      context.save()
+      context.fillStyle = card.textStyle.color
+      context.font = `${card.textStyle.italic ? 'italic ' : ''}${card.textStyle.bold ? '700' : '400'} 15px sans-serif`
+      context.textAlign = 'left'
+      context.textBaseline = 'top'
+      drawWrappedText(
+        context,
+        card.content,
+        card.position.x + 12,
+        card.position.y + 50,
+        Math.max(1, card.size.width - 24),
+        21,
+        card.position.y + card.size.height - 12,
+      )
+      context.restore()
+    }
     context.strokeStyle = 'rgba(19, 33, 38, 0.36)'
     context.lineWidth = 1
     context.strokeRect(card.position.x, card.position.y, card.size.width, card.size.height)
@@ -198,6 +234,10 @@ export function renderProjectPng(project: AirNoteProject, canvas: HTMLCanvasElem
   return bounds
 }
 
+export function renderProjectPng(project: AirNoteProject, canvas: HTMLCanvasElement) {
+  return renderProjectImage(project, canvas, 'png')
+}
+
 export function createProjectPngBlob(project: AirNoteProject) {
   const canvas = document.createElement('canvas')
   renderProjectPng(project, canvas)
@@ -211,4 +251,19 @@ export function createProjectPngBlob(project: AirNoteProject) {
 
 export async function exportProjectPng(project: AirNoteProject, filename = 'airnote-canvas.png') {
   downloadBlob(await createProjectPngBlob(project), filename)
+}
+
+export function createProjectJpgBlob(project: AirNoteProject) {
+  const canvas = document.createElement('canvas')
+  renderProjectImage(project, canvas, 'jpg')
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob)
+      else reject(new Error('图片编码失败。'))
+    }, 'image/jpeg', 0.92)
+  })
+}
+
+export async function exportProjectJpg(project: AirNoteProject, filename = 'airnote-canvas.jpg') {
+  downloadBlob(await createProjectJpgBlob(project), filename)
 }

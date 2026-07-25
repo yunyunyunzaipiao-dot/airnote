@@ -15,8 +15,14 @@ import {
 
 const THEME_PANEL_ID = 'airnote-theme-panel'
 
-export function ThemeMenu() {
-  const [theme, setTheme] = useState<UiThemeId>(() => loadUiTheme())
+interface ThemeMenuProps {
+  theme?: UiThemeId
+  onThemeChange?: (theme: UiThemeId) => void
+}
+
+export function ThemeMenu({ theme: controlledTheme, onThemeChange }: ThemeMenuProps = {}) {
+  const [internalTheme, setInternalTheme] = useState<UiThemeId>(() => loadUiTheme())
+  const theme = controlledTheme ?? internalTheme
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -46,7 +52,8 @@ export function ThemeMenu() {
   }, [open])
 
   const selectTheme = (nextTheme: UiThemeId) => {
-    setTheme(nextTheme)
+    if (controlledTheme === undefined) setInternalTheme(nextTheme)
+    onThemeChange?.(nextTheme)
     saveUiTheme(nextTheme)
   }
 
@@ -63,7 +70,7 @@ export function ThemeMenu() {
         title="切换界面主题"
         onClick={() => setOpen((current) => !current)}
       >
-        空
+        AN
       </button>
 
       {open ? (

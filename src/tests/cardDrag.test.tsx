@@ -30,6 +30,7 @@ describe('CARD-02 card drag preview', () => {
         strokes={[]}
         cards={[{
           id: 'card-1',
+          kind: 'ink',
           strokeIds: [],
           title: '拖动测试',
           position: { x: 100, y: 100 },
@@ -38,6 +39,7 @@ describe('CARD-02 card drag preview', () => {
         edges={[]}
         currentGroup={null}
         zoom={1}
+        viewport={{ x: 0, y: 0, zoom: 1 }}
         calibration={{
           phase: 'ready',
           roiStep: 4,
@@ -49,6 +51,8 @@ describe('CARD-02 card drag preview', () => {
         onPointerStart={vi.fn()}
         onPointerMove={vi.fn()}
         onPointerEnd={vi.fn()}
+        onEraseAtPoint={vi.fn(() => false)}
+        onPan={vi.fn()}
         onSuggestSelection={vi.fn(() => true)}
         onGenerateCard={vi.fn()}
         onContinueGroup={vi.fn()}
@@ -56,6 +60,7 @@ describe('CARD-02 card drag preview', () => {
         onMoveCard={onMoveCard}
         onResizeCard={vi.fn()}
         onRenameCard={vi.fn()}
+        onUpdateTextCard={vi.fn()}
         onDeleteCard={vi.fn()}
         onCreateEdge={vi.fn(() => true)}
         onUpdateEdge={vi.fn()}
@@ -74,5 +79,66 @@ describe('CARD-02 card drag preview', () => {
       240,
       expect.objectContaining({ width: expect.any(Number), height: expect.any(Number) }),
     )
+  })
+
+  it('uses Shift selection to move multiple cards in one batch command', () => {
+    const onMoveCard = vi.fn()
+    const onMoveCards = vi.fn()
+    render(
+      <WorkspaceCanvas
+        inputMode="mouse"
+        experimentalStylesEnabled
+        reducedMotion={false}
+        tool="select"
+        edgeType="undirected"
+        strokes={[]}
+        cards={[
+          { id: 'card-1', kind: 'ink', strokeIds: [], title: '第一张', position: { x: 100, y: 100 }, size: { width: 240, height: 180 } },
+          { id: 'card-2', kind: 'ink', strokeIds: [], title: '第二张', position: { x: 400, y: 200 }, size: { width: 240, height: 180 } },
+        ]}
+        edges={[]}
+        currentGroup={null}
+        zoom={1}
+        viewport={{ x: 0, y: 0, zoom: 1 }}
+        calibration={{ phase: 'ready', roiStep: 4, pinchCycles: 3, awaitingRelease: false, message: 'ready' }}
+        onReady={vi.fn()}
+        onPointerStart={vi.fn()}
+        onPointerMove={vi.fn()}
+        onPointerEnd={vi.fn()}
+        onEraseAtPoint={vi.fn(() => false)}
+        onPan={vi.fn()}
+        onSuggestSelection={vi.fn(() => true)}
+        onGenerateCard={vi.fn()}
+        onContinueGroup={vi.fn()}
+        onCancelGroup={vi.fn()}
+        onMoveCard={onMoveCard}
+        onMoveCards={onMoveCards}
+        onResizeCard={vi.fn()}
+        onRenameCard={vi.fn()}
+        onUpdateTextCard={vi.fn()}
+        onDeleteCard={vi.fn()}
+        onCreateEdge={vi.fn(() => true)}
+        onUpdateEdge={vi.fn()}
+        onEdgeTypeChange={vi.fn()}
+      />,
+    )
+
+    const first = screen.getByText('第一张').closest('.idea-card__title')!
+    const second = screen.getByText('第二张').closest('.idea-card__title')!
+    fireEvent.pointerDown(first, { pointerId: 1, button: 0, clientX: 120, clientY: 120 })
+    fireEvent.pointerUp(first, { pointerId: 1, clientX: 120, clientY: 120 })
+    fireEvent.pointerDown(second, { pointerId: 2, button: 0, shiftKey: true, clientX: 420, clientY: 220 })
+    fireEvent.pointerUp(second, { pointerId: 2, clientX: 420, clientY: 220 })
+    expect(screen.getByText('已选择 2 张卡片，可整体移动')).toBeInTheDocument()
+
+    fireEvent.pointerDown(first, { pointerId: 3, button: 0, clientX: 120, clientY: 120 })
+    fireEvent.pointerMove(first, { pointerId: 3, clientX: 170, clientY: 160 })
+    fireEvent.pointerUp(first, { pointerId: 3, clientX: 170, clientY: 160 })
+
+    expect(onMoveCards).toHaveBeenCalledWith([
+      { cardId: 'card-1', x: 150, y: 140 },
+      { cardId: 'card-2', x: 450, y: 240 },
+    ], expect.objectContaining({ width: expect.any(Number), height: expect.any(Number) }))
+    expect(onMoveCard).not.toHaveBeenCalled()
   })
 })

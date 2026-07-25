@@ -3,43 +3,6 @@ import { DEFAULT_SETTINGS, type AirNoteProject, type AirNoteSettings, type Works
 export const WORKSPACE_STORAGE_KEY = 'airnote.workspace.current'
 export const CORRUPT_WORKSPACE_KEY = 'airnote.workspace.corrupt'
 
-export function workspaceKeyFor(id: string) {
-  return `airnote.workspace.${id}`
-}
-
-export function loadWorkspaceById(id: string, storage: StorageLike = localStorage): { document: WorkspaceDocument; settings: AirNoteSettings } | null {
-  const raw = storage.getItem(workspaceKeyFor(id))
-  if (!raw) return null
-  try {
-    const validation = validateProjectDetailed(JSON.parse(raw) as unknown)
-    if (!validation.ok) throw new Error('invalid project')
-    const { schemaVersion: _schemaVersion, settings, ...document } = validation.project
-    return { document, settings: { ...settings, inputMode: 'mouse' } }
-  } catch {
-    throw new Error('项目无法恢复，可导入备份JSON。')
-  }
-}
-
-export function saveWorkspaceById(id: string, project: AirNoteProject, storage: StorageLike = localStorage) {
-  if (!validateProject(project)) throw new Error('项目数据校验失败，未写入本地存储。')
-  storage.setItem(workspaceKeyFor(id), JSON.stringify(project))
-}
-
-export function deleteWorkspaceById(id: string, storage: StorageLike = localStorage) {
-  storage.removeItem(workspaceKeyFor(id))
-}
-
-export function listWorkspaceIds(storage: StorageLike = localStorage): string[] {
-  const ids: string[] = []
-  for (let i = 0; i < storage.length; i += 1) {
-    const key = storage.key(i)
-    if (key?.startsWith('airnote.workspace.') && key !== WORKSPACE_STORAGE_KEY && key !== CORRUPT_WORKSPACE_KEY) {
-      ids.push(key.slice('airnote.workspace.'.length))
-    }
-  }
-  return ids
-}
-
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem' | 'length' | 'key'>
@@ -90,7 +53,7 @@ function validSettings(value: unknown) {
   if (value.inputMode !== 'mouse' && value.inputMode !== 'gesture') return false
   if (value.experimentalStylesEnabled !== undefined && typeof value.experimentalStylesEnabled !== 'boolean') return false
   if (!record(value.brush) || !hasOnlyKeys(value.brush, ['color', 'width', 'style'])) return false
-  if (typeof value.brush.color !== 'string' || ![2, 4, 8].includes(value.brush.width as number) || !['ink', 'glow', 'particle'].includes(value.brush.style as string)) return false
+  if (typeof value.brush.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(value.brush.color) || ![2, 4, 8].includes(value.brush.width as number) || !['ink', 'glow', 'particle'].includes(value.brush.style as string)) return false
   if (!record(value.gesture) || !hasOnlyKeys(value.gesture, [
     'writingROI',
     'pinchDownThreshold',
@@ -104,6 +67,8 @@ function validSettings(value: unknown) {
   const roi = gesture.writingROI
   if (![roi.left, roi.top, roi.right, roi.bottom].every(finite)) return false
   if ((roi.left as number) >= (roi.right as number) || (roi.top as number) >= (roi.bottom as number)) return false
+  if ((roi.left as number) < 0 || (roi.top as number) < 0 || (roi.right as number) > 1 || (roi.bottom as number) > 1) return false
+  if ((roi.right as number) - (roi.left as number) < 0.25 || (roi.bottom as number) - (roi.top as number) < 0.25) return false
   if (![gesture.pinchDownThreshold, gesture.pinchUpThreshold].every(finite)) return false
   if ((gesture.pinchDownThreshold as number) >= (gesture.pinchUpThreshold as number)) return false
   return gesture.handPreference === 'any'
@@ -112,12 +77,22 @@ function validSettings(value: unknown) {
     && typeof gesture.usesDefaultCalibration === 'boolean'
 }
 
-export function validateProjectDetailed(value: unknown): ProjectValidationResult {
-  if (!record(value)) return { ok: false, error: { reason: 'invalid-format', damagedObjectCount: 0 } }
-  if (finite(value.schemaVersion) && value.schemaVersion > 1) {
+function migrateProject(value: Record<string, unknown>) {
+  if (value.schemaVersion !== 1) return value
+  if (!Array.isArray(value.cards)) return value
+  const migrated = structuredClone(value) as Record<string, unknown>
+  migrated.schemaVersion = 2
+  migrated.cards = (migrated.cards as unknown[]).map((card) => record(card) ? { ...card, kind: 'ink' } : card)
+  return migrated
+}
+
+export function validateProjectDetailed(input: unknown): ProjectValidationResult {
+  if (!record(input)) return { ok: false, error: { reason: 'invalid-format', damagedObjectCount: 0 } }
+  if (finite(input.schemaVersion) && input.schemaVersion > 2) {
     return { ok: false, error: { reason: 'version-too-new', damagedObjectCount: 0 } }
   }
-  if (value.schemaVersion !== 1 || !hasOnlyKeys(value, ['schemaVersion', 'workspace', 'strokes', 'groups', 'cards', 'edges', 'settings'])) {
+  const value = migrateProject(input)
+  if (value.schemaVersion !== 2 || !hasOnlyKeys(value, ['schemaVersion', 'workspace', 'strokes', 'groups', 'cards', 'edges', 'settings'])) {
     return { ok: false, error: { reason: 'invalid-format', damagedObjectCount: 0 } }
   }
   if (!record(value.workspace) || !hasOnlyKeys(value.workspace, ['id', 'name', 'createdAt', 'updatedAt', 'viewport'])) {
@@ -130,7 +105,7 @@ export function validateProjectDetailed(value: unknown): ProjectValidationResult
   if (!record(workspace.viewport) || !hasOnlyKeys(workspace.viewport, ['x', 'y', 'zoom'])) {
     return { ok: false, error: { reason: 'invalid-format', damagedObjectCount: 0 } }
   }
-  if (!finite(workspace.viewport.x) || !finite(workspace.viewport.y) || !finite(workspace.viewport.zoom) || workspace.viewport.zoom <= 0) {
+  if (!finite(workspace.viewport.x) || !finite(workspace.viewport.y) || !finite(workspace.viewport.zoom) || workspace.viewport.zoom < 0.25 || workspace.viewport.zoom > 3) {
     return { ok: false, error: { reason: 'invalid-format', damagedObjectCount: 0 } }
   }
   if (!validSettings(value.settings)) return { ok: false, error: { reason: 'invalid-format', damagedObjectCount: 0 } }
@@ -173,13 +148,29 @@ export function validateProjectDetailed(value: unknown): ProjectValidationResult
   }
 
   for (const card of project.cards) {
-    if (!record(card) || !hasOnlyKeys(card, ['id', 'strokeIds', 'title', 'position', 'size'])) {
+    if (!record(card) || typeof card.id !== 'string' || typeof card.title !== 'string' || card.title.length > 100 || !record(card.position) || !record(card.size)) {
       return { ok: false, error: { reason: 'invalid-format', damagedObjectCount: 0 } }
     }
-    if (typeof card.id !== 'string' || !Array.isArray(card.strokeIds) || !card.strokeIds.every((id) => typeof id === 'string')) {
-      return { ok: false, error: { reason: 'invalid-format', damagedObjectCount: 0 } }
-    }
-    if (typeof card.title !== 'string' || card.title.length > 100 || !record(card.position) || !record(card.size)) {
+    if (card.kind === 'ink') {
+      if (!hasOnlyKeys(card, ['id', 'kind', 'strokeIds', 'title', 'position', 'size'])
+        || !Array.isArray(card.strokeIds)
+        || !card.strokeIds.every((id) => typeof id === 'string')) {
+        return { ok: false, error: { reason: 'invalid-format', damagedObjectCount: 0 } }
+      }
+    } else if (card.kind === 'text') {
+      if (!hasOnlyKeys(card, ['id', 'kind', 'title', 'content', 'textStyle', 'position', 'size'])
+        || typeof card.content !== 'string'
+        || card.content.length > 5000
+        || !record(card.textStyle)
+        || !hasOnlyKeys(card.textStyle, ['bold', 'italic', 'underline', 'color'])
+        || typeof card.textStyle.bold !== 'boolean'
+        || typeof card.textStyle.italic !== 'boolean'
+        || typeof card.textStyle.underline !== 'boolean'
+        || typeof card.textStyle.color !== 'string'
+        || !/^#[0-9a-f]{6}$/i.test(card.textStyle.color)) {
+        return { ok: false, error: { reason: 'invalid-format', damagedObjectCount: 0 } }
+      }
+    } else {
       return { ok: false, error: { reason: 'invalid-format', damagedObjectCount: 0 } }
     }
     if (!hasOnlyKeys(card.position, ['x', 'y']) || !finite(card.position.x) || !finite(card.position.y)) {
@@ -226,6 +217,7 @@ export function validateProjectDetailed(value: unknown): ProjectValidationResult
     if (stroke.cardId && !cardIds.has(stroke.cardId)) damagedObjects.add(stroke.id)
   }
   for (const card of project.cards) {
+    if (card.kind !== 'ink') continue
     for (const strokeId of card.strokeIds) {
       if (!strokeIds.has(strokeId) || assigned.has(strokeId)) damagedObjects.add(card.id)
       assigned.add(strokeId)
@@ -237,7 +229,8 @@ export function validateProjectDetailed(value: unknown): ProjectValidationResult
     }
   }
   for (const stroke of project.strokes) {
-    if (stroke.cardId && !project.cards.find((card) => card.id === stroke.cardId)?.strokeIds.includes(stroke.id)) {
+    const card = project.cards.find((item) => item.id === stroke.cardId)
+    if (stroke.cardId && (card?.kind !== 'ink' || !card.strokeIds.includes(stroke.id))) {
       damagedObjects.add(stroke.id)
     }
   }
@@ -266,7 +259,11 @@ export function loadWorkspace(storage: StorageLike = localStorage): { document: 
     const { schemaVersion: _schemaVersion, settings, ...document } = validation.project
     return { document, settings: { ...settings, inputMode: 'mouse' } }
   } catch {
-    storage.setItem(CORRUPT_WORKSPACE_KEY, raw)
+    try {
+      storage.setItem(CORRUPT_WORKSPACE_KEY, raw)
+    } catch {
+      // 损坏副本备份失败也不能阻塞鼠标工作区恢复。
+    }
     throw new Error('上次项目无法恢复，可导入备份JSON。')
   }
 }

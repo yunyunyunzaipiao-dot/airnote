@@ -1,30 +1,35 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
 import { CalibrationPanel } from '../components/CalibrationPanel'
+import { CameraConsentDialog } from '../components/CameraConsentDialog'
 import { CameraPreview } from '../components/CameraPreview'
 import { GestureStatus } from '../components/GestureStatus'
 import { LeftToolbar } from '../components/LeftToolbar'
-import { OnboardingOverlay } from '../components/OnboardingOverlay'
+import { hasCompletedOnboarding, OnboardingFlow } from '../components/OnboardingFlow'
+import { StatusCenter, useStatusCenter } from '../components/StatusCenter'
 import { TopBar } from '../components/TopBar'
 import { WorkspaceCanvas } from '../components/WorkspaceCanvas'
 import { ZoomControl } from '../components/ZoomControl'
-import { exportProjectPng } from '../export/pngExport'
+import { exportProjectJpg, exportProjectPng } from '../export/pngExport'
 import { exportProjectJson, readProjectFile } from '../export/projectTransfer'
 import { useAirNoteRuntime } from '../store/useAirNoteRuntime'
 
 export function WorkspacePage() {
-  const { id } = useParams<{ id: string }>()
-  const runtime = useAirNoteRuntime(id)
+  const runtime = useAirNoteRuntime()
   const pointerEventsSupported = typeof window.PointerEvent !== 'undefined'
-  const [zoom, setZoom] = useState(1)
+  const viewport = runtime.document.workspace.viewport
+  const [showOnboarding, setShowOnboarding] = useState(() => !hasCompletedOnboarding())
+  const [showCameraConsent, setShowCameraConsent] = useState(false)
+  const statusCenter = useStatusCenter()
 
   useEffect(() => {
     if (!runtime.workspaceMessage) return
-    const timer = setTimeout(() => {
-      runtime.reportWorkspaceMessage(null)
-    }, 3000)
-    return () => clearTimeout(timer)
-  }, [runtime.workspaceMessage])
+    statusCenter.push(runtime.workspaceMessage)
+    runtime.reportWorkspaceMessage(null)
+  }, [runtime.workspaceMessage, runtime.reportWorkspaceMessage, statusCenter.push])
+
+  useEffect(() => {
+    if (runtime.uiState.errorMessage) statusCenter.push(runtime.uiState.errorMessage, 'error')
+  }, [runtime.uiState.errorMessage, statusCenter.push])
 
   const confirmClear = () => {
     const confirmed = window.confirm('将清空当前画布中的笔迹、卡片和连接线。此操作可撤销一次。')
@@ -49,6 +54,15 @@ export function WorkspacePage() {
     }
   }
 
+  const exportJpg = async () => {
+    try {
+      await exportProjectJpg(runtime.createProjectSnapshot())
+      runtime.reportWorkspaceMessage('JPG 图片已导出。')
+    } catch {
+      runtime.reportWorkspaceMessage('JPG 导出失败，请稍后重试。')
+    }
+  }
+
   const importProject = async (file: File) => {
     const result = await readProjectFile(file)
     if (!result.ok) {
@@ -59,12 +73,22 @@ export function WorkspacePage() {
     runtime.replaceProject(result.project)
   }
 
+  const setInputMode = (mode: 'gesture' | 'mouse') => {
+    if (mode === 'gesture' && runtime.uiState.cameraStatus !== 'running') {
+      statusCenter.push('请先启用摄像头并完成校准，再切换到手势模式。', 'warning')
+      setShowCameraConsent(true)
+      return
+    }
+    runtime.setInputMode(mode)
+  }
+
   return (
     <main className="app-shell">
       {!pointerEventsSupported ? (
         <p className="blocking-banner" role="alert">当前浏览器不受支持，请使用最新版 Chrome 或 Edge。</p>
       ) : null}
       <TopBar
+        workspaceName={runtime.document.workspace.name}
         cameraStatus={runtime.uiState.cameraStatus}
         inputMode={runtime.settings.inputMode}
         canUndo={runtime.canUndo}
@@ -75,6 +99,7 @@ export function WorkspacePage() {
         onRedo={runtime.redo}
         onClear={confirmClear}
         onExportPng={exportPng}
+        onExportJpg={exportJpg}
         onExportProject={exportProject}
         onImportProject={importProject}
       />
@@ -89,11 +114,11 @@ export function WorkspacePage() {
             performanceStage={runtime.stylePerformanceStage}
             reducedMotion={runtime.reducedMotion}
             onChange={runtime.setTool}
-            onInputModeChange={runtime.setInputMode}
+            onInputModeChange={setInputMode}
             onGesturePauseEnabledChange={runtime.setGesturePauseEnabled}
             onExperimentalStylesChange={runtime.setExperimentalStylesEnabled}
             onUpdateBrush={runtime.updateBrush}
-            onInsertImage={() => runtime.reportWorkspaceMessage('插入图片功能即将推出。')}
+            onCreateTextCard={runtime.addTextCard}
           />
           <div className="floating-divider" aria-hidden="true" />
           <CameraPreview
@@ -103,9 +128,9 @@ export function WorkspacePage() {
             inputMode={runtime.settings.inputMode}
             canUseGesture={runtime.calibration.phase === 'ready'}
             videoRef={runtime.videoRef}
-            onEnable={runtime.enableCamera}
+            onEnable={() => setShowCameraConsent(true)}
             onDisable={runtime.disableCamera}
-            onInputModeChange={runtime.setInputMode}
+            onInputModeChange={setInputMode}
             onGestureRequest={runtime.requestGestureMode}
             onUseDefaultCalibration={runtime.skipCalibration}
           />
@@ -120,9 +145,9 @@ export function WorkspacePage() {
           style={{
             position: 'absolute',
             inset: 0,
-            width: `${100 / zoom}%`,
-            height: `${100 / zoom}%`,
-            transform: `scale(${zoom})`,
+            width: `${100 / viewport.zoom}%`,
+            height: `${100 / viewport.zoom}%`,
+            transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
             transformOrigin: 'top left',
           }}
         >
@@ -137,18 +162,23 @@ export function WorkspacePage() {
             edges={runtime.document.edges}
             currentGroup={runtime.currentGroup}
             calibration={runtime.calibration}
-            zoom={zoom}
+            zoom={viewport.zoom}
+            viewport={viewport}
             onReady={runtime.attachCanvas}
             onPointerStart={runtime.startMouseStroke}
             onPointerMove={runtime.appendMousePoint}
             onPointerEnd={runtime.endMouseStroke}
+            onEraseAtPoint={runtime.eraseStrokeAtPoint}
+            onPan={(x, y) => runtime.setViewport({ x, y })}
             onSuggestSelection={runtime.suggestSelectionGroup}
             onGenerateCard={runtime.generateCard}
             onContinueGroup={runtime.continueGroup}
             onCancelGroup={runtime.cancelGroup}
             onMoveCard={runtime.commitCardMove}
+            onMoveCards={runtime.commitCardsMove}
             onResizeCard={runtime.commitCardResize}
             onRenameCard={runtime.commitCardRename}
+            onUpdateTextCard={runtime.commitTextCardUpdate}
             onDeleteCard={runtime.commitCardDelete}
             onCreateEdge={runtime.commitEdge}
             onUpdateEdge={runtime.commitEdgeType}
@@ -166,14 +196,26 @@ export function WorkspacePage() {
             onSkip={runtime.skipCalibration}
           />
         </div>
-        {runtime.workspaceMessage ? (
-          <p className="workspace-toast workspace-toast--visible" role="status">{runtime.workspaceMessage}</p>
-        ) : null}
-        {!runtime.onboardingCompleted ? (
-          <OnboardingOverlay onComplete={runtime.completeOnboarding} />
-        ) : null}
-        <ZoomControl zoom={zoom} onZoomChange={setZoom} />
+        <ZoomControl zoom={viewport.zoom} onZoomChange={(zoom) => runtime.setViewport({ zoom })} />
       </div>
+      <StatusCenter
+        visible={statusCenter.visible}
+        history={statusCenter.history}
+        historyOpen={statusCenter.historyOpen}
+        onHistoryOpenChange={statusCenter.setHistoryOpen}
+        onDismiss={statusCenter.dismiss}
+        onExportProject={exportProject}
+      />
+      {showCameraConsent ? (
+        <CameraConsentDialog
+          onCancel={() => setShowCameraConsent(false)}
+          onConfirm={() => {
+            setShowCameraConsent(false)
+            void runtime.enableCamera()
+          }}
+        />
+      ) : null}
+      {showOnboarding ? <OnboardingFlow onClose={() => setShowOnboarding(false)} /> : null}
     </main>
   )
 }

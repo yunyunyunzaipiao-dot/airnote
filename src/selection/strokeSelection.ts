@@ -1,4 +1,4 @@
-import type { BoundingBox, Stroke } from '../types/workspace'
+import type { BoundingBox, IdeaCard, Stroke } from '../types/workspace'
 
 export interface SelectionPoint {
   x: number
@@ -105,4 +105,25 @@ export function strokeIdsInFreeform(strokes: Stroke[], polygon: SelectionPoint[]
   return strokes
     .filter((stroke) => !stroke.cardId && strokeIntersectsPolygon(stroke, polygon))
     .map((stroke) => stroke.id)
+}
+
+function cardCenter(card: IdeaCard): SelectionPoint {
+  return {
+    x: card.position.x + card.size.width / 2,
+    y: card.position.y + card.size.height / 2,
+  }
+}
+
+export function cardIdsInRectangle(cards: IdeaCard[], rect: BoundingBox) {
+  if (rect.width < 4 || rect.height < 4) return []
+  return cards
+    .filter((card) => pointInRect(cardCenter(card), rect))
+    .map((card) => card.id)
+}
+
+export function cardIdsInFreeform(cards: IdeaCard[], polygon: SelectionPoint[]) {
+  if (polygon.length < 3) return []
+  return cards
+    .filter((card) => pointInPolygon(cardCenter(card), polygon))
+    .map((card) => card.id)
 }

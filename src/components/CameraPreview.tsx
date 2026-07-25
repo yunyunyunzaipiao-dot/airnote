@@ -27,7 +27,7 @@ const statusLabels: Record<CameraStatus, string> = {
 
 export function CameraPreview({
   status,
-  settings: _settings,
+  settings,
   errorMessage,
   inputMode,
   canUseGesture,
@@ -43,7 +43,12 @@ export function CameraPreview({
 
   return (
     <section className="camera-panel-mini" aria-label="摄像头与输入模式">
-      <div className="camera-preview-mini">
+      <div
+        className={`camera-preview-mini ${isRunning ? 'camera-preview-mini--running' : ''}`}
+        style={isRunning && settings.width && settings.height
+          ? { aspectRatio: `${settings.width} / ${settings.height}` }
+          : undefined}
+      >
         <video ref={videoRef} muted playsInline aria-label="镜像摄像头预览" />
         {!isRunning ? (
           <div className="camera-preview-mini__empty">
@@ -89,14 +94,14 @@ export function CameraPreview({
       </div>
 
       {!isRunning ? (
-        <button className="camera-toggle-btn" type="button" onClick={onEnable} disabled={isBusy} title="启用摄像头">
+        <button className="camera-toggle-btn" type="button" onClick={onEnable} disabled={isBusy} aria-label="启用摄像头" title="启用摄像头">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8">
             <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
             <circle cx="12" cy="13" r="4" />
           </svg>
         </button>
       ) : (
-        <button className="camera-toggle-btn camera-toggle-btn--stop" type="button" onClick={onDisable} title="关闭摄像头">
+        <button className="camera-toggle-btn camera-toggle-btn--stop" type="button" onClick={onDisable} aria-label="关闭摄像头" title="关闭摄像头">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8">
             <line x1="1" y1="1" x2="23" y2="23" />
             <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
@@ -112,7 +117,7 @@ export function CameraPreview({
         </button>
       ) : null}
 
-      {errorMessage ? <p className="camera-error-mini" role="alert">{errorMessage}</p> : null}
+      {errorMessage ? <p className="camera-error-mini">{errorMessage}</p> : null}
     </section>
   )
 }

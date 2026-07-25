@@ -3,7 +3,7 @@ import type { CanvasPoint } from './m0'
 export type InputMode = 'gesture' | 'mouse'
 export type BrushWidth = 2 | 4 | 8
 export type VisualStyle = 'ink' | 'glow' | 'particle'
-export type WorkspaceTool = 'draw' | 'select' | 'lasso-rect' | 'lasso-free'
+export type WorkspaceTool = 'draw' | 'erase' | 'pan' | 'select' | 'lasso-rect' | 'lasso-free'
 
 export interface StrokePoint extends CanvasPoint {
   t: number
@@ -33,13 +33,32 @@ export interface StrokeGroup {
   status: 'collecting' | 'suggested' | 'committed'
 }
 
-export interface IdeaCard {
+export interface BaseCard {
   id: string
-  strokeIds: string[]
   title: string
   position: { x: number; y: number }
   size: { width: number; height: number }
 }
+
+export interface InkCard extends BaseCard {
+  kind: 'ink'
+  strokeIds: string[]
+}
+
+export interface TextCardStyle {
+  bold: boolean
+  italic: boolean
+  underline: boolean
+  color: string
+}
+
+export interface TextCard extends BaseCard {
+  kind: 'text'
+  content: string
+  textStyle: TextCardStyle
+}
+
+export type IdeaCard = InkCard | TextCard
 
 export type EdgeAnchor = 'top' | 'right' | 'bottom' | 'left'
 
@@ -99,7 +118,7 @@ export interface WorkspaceDocument {
 }
 
 export interface AirNoteProject extends WorkspaceDocument {
-  schemaVersion: 1
+  schemaVersion: 2
   settings: AirNoteSettings
 }
 

@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { calculateExportBounds, drawStroke, renderProjectPng } from '../export/pngExport'
+import { calculateExportBounds, drawStroke, renderProjectImage, renderProjectPng } from '../export/pngExport'
 import { DEFAULT_SETTINGS, type AirNoteProject } from '../types/workspace'
 
 function visualProject(): AirNoteProject {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     workspace: { id: 'workspace', name: '图片', createdAt: 0, updatedAt: 0, viewport: { x: 0, y: 0, zoom: 1 } },
     strokes: [
       { id: 'free', points: [{ x: 100, y: 100, t: 0 }, { x: 200, y: 200, t: 16 }], color: '#172B3A', width: 4, style: 'ink', createdAt: 0 },
@@ -12,8 +12,8 @@ function visualProject(): AirNoteProject {
     ],
     groups: [],
     cards: [
-      { id: 'card-a', strokeIds: ['card-ink'], title: '导出卡片', position: { x: 300, y: 250 }, size: { width: 200, height: 120 } },
-      { id: 'card-b', strokeIds: [], title: '目标', position: { x: 560, y: 250 }, size: { width: 160, height: 120 } },
+      { id: 'card-a', kind: 'ink', strokeIds: ['card-ink'], title: '导出卡片', position: { x: 300, y: 250 }, size: { width: 200, height: 120 } },
+      { id: 'card-b', kind: 'ink', strokeIds: [], title: '目标', position: { x: 560, y: 250 }, size: { width: 160, height: 120 } },
     ],
     edges: [{ id: 'edge', sourceCardId: 'card-a', targetCardId: 'card-b', type: 'directed' }],
     settings: structuredClone(DEFAULT_SETTINGS),
@@ -26,7 +26,7 @@ function canvasHarness() {
   const context = {
     fillStyle: '', strokeStyle: '', lineWidth: 0, lineCap: '', lineJoin: '', font: '', textAlign: '', textBaseline: '',
     globalAlpha: 1, shadowColor: 'transparent',
-    fillRect: vi.fn(), setTransform: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(), arc: vi.fn(),
+    clearRect: vi.fn(), fillRect: vi.fn(), setTransform: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(), arc: vi.fn(), measureText: vi.fn(() => ({ width: 8 })),
     closePath: vi.fn(), fill: vi.fn(), save: vi.fn(), rect: vi.fn(), clip: vi.fn(), restore: vi.fn(),
     strokeRect: vi.fn(), fillText: vi.fn(),
   }
@@ -56,6 +56,16 @@ describe('SAVE-02 PNG export renderer', () => {
     expect(context.strokeRect).toHaveBeenCalledTimes(2)
     expect(context.fillText).toHaveBeenCalledWith('导出卡片', 310, 269)
     expect(context.fillText).toHaveBeenCalledWith('目标', 570, 269)
+  })
+
+  it('keeps PNG transparent and gives JPG a white background', () => {
+    const png = canvasHarness()
+    renderProjectImage(visualProject(), png.canvas, 'png')
+    expect(png.context.clearRect).toHaveBeenCalled()
+    expect(png.context.fillRect).toHaveBeenCalledTimes(4)
+    const jpg = canvasHarness()
+    renderProjectImage(visualProject(), jpg.canvas, 'jpg')
+    expect(jpg.context.fillRect).toHaveBeenCalledTimes(5)
   })
 
   it('reflects enabled Glow and Particle styles without changing Stroke points', () => {

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  cardIdsInFreeform,
+  cardIdsInRectangle,
   selectionRect,
   strokeIdsInFreeform,
   strokeIdsInRectangle,
 } from '../selection/strokeSelection'
-import type { Stroke } from '../types/workspace'
+import type { IdeaCard, Stroke } from '../types/workspace'
 
 function stroke(id: string, points: Array<{ x: number; y: number }>, cardId?: string): Stroke {
   return {
@@ -45,5 +47,15 @@ describe('stroke selection geometry', () => {
   it('ignores tiny or incomplete selections', () => {
     expect(strokeIdsInRectangle(strokes, { x: 0, y: 0, width: 2, height: 2 })).toEqual([])
     expect(strokeIdsInFreeform(strokes, [{ x: 0, y: 0 }, { x: 20, y: 20 }])).toEqual([])
+  })
+
+  it('selects cards by their center in rectangle and freeform regions', () => {
+    const cards: IdeaCard[] = [
+      { id: 'inside-card', kind: 'text', title: '内', content: '', position: { x: 10, y: 10 }, size: { width: 100, height: 80 }, textStyle: { bold: false, italic: false, underline: false, color: '#172B3A' } },
+      { id: 'outside-card', kind: 'ink', title: '外', strokeIds: [], position: { x: 200, y: 200 }, size: { width: 100, height: 80 } },
+    ]
+    const polygon = [{ x: 0, y: 0 }, { x: 120, y: 0 }, { x: 120, y: 120 }, { x: 0, y: 120 }]
+    expect(cardIdsInRectangle(cards, { x: 0, y: 0, width: 120, height: 120 })).toEqual(['inside-card'])
+    expect(cardIdsInFreeform(cards, polygon)).toEqual(['inside-card'])
   })
 })

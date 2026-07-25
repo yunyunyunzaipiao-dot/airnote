@@ -16,7 +16,7 @@ function memoryStorage() {
 }
 
 describe('workspace persistence', () => {
-  it('round-trips a schemaVersion 1 project and forces safe mouse restore', () => {
+  it('round-trips a schemaVersion 2 project and forces safe mouse restore', () => {
     const storage = memoryStorage()
     const project = projectFromDocument(createWorkspaceDocument(0), { ...DEFAULT_SETTINGS, inputMode: 'gesture' })
     saveWorkspace(project, storage)
@@ -33,9 +33,10 @@ describe('workspace persistence', () => {
     expect(storage.values.get(CORRUPT_WORKSPACE_KEY)).toBe('{broken')
   })
 
-  it('loads an older schemaVersion 1 project with experimental styles safely disabled', () => {
+  it('loads an older project with experimental styles safely disabled', () => {
     const storage = memoryStorage()
     const project = projectFromDocument(createWorkspaceDocument(0), structuredClone(DEFAULT_SETTINGS))
+    ;(project as unknown as Record<string, unknown>).schemaVersion = 1
     delete (project.settings as Partial<typeof project.settings>).experimentalStylesEnabled
     storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(project))
     const restored = loadWorkspace(storage)!
@@ -43,7 +44,7 @@ describe('workspace persistence', () => {
     expect(restored.settings.brush.style).toBe('ink')
   })
 
-  it('loads and strips drawMode from a temporary schemaVersion 1 project', () => {
+  it('loads and strips drawMode from a temporary project', () => {
     const storage = memoryStorage()
     const project = projectFromDocument(createWorkspaceDocument(0), structuredClone(DEFAULT_SETTINGS))
     const temporaryProject = structuredClone(project) as unknown as Record<string, unknown>
@@ -53,5 +54,18 @@ describe('workspace persistence', () => {
     storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(temporaryProject))
     const restored = loadWorkspace(storage)!
     expect(restored.settings.gesture).not.toHaveProperty('drawMode')
+  })
+
+  it('migrates a schemaVersion 1 ink card before replacing the workspace', () => {
+    const storage = memoryStorage()
+    const project = projectFromDocument(createWorkspaceDocument(0), structuredClone(DEFAULT_SETTINGS))
+    project.strokes = [{ id: 's1', points: [{ x: 0, y: 0, t: 0 }], color: '#172B3A', width: 4, style: 'ink', createdAt: 0, cardId: 'c1' }]
+    project.cards = [{ id: 'c1', kind: 'ink', strokeIds: ['s1'], title: '旧卡片', position: { x: 0, y: 0 }, size: { width: 120, height: 96 } }]
+    const legacy = structuredClone(project) as unknown as Record<string, unknown>
+    legacy.schemaVersion = 1
+    delete ((legacy.cards as Array<Record<string, unknown>>)[0]).kind
+    storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(legacy))
+    const restored = loadWorkspace(storage)!
+    expect(restored.document.cards[0]).toMatchObject({ kind: 'ink', strokeIds: ['s1'] })
   })
 })

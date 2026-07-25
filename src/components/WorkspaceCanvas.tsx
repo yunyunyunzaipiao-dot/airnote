@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { cardInkMetrics } from '../drawing/cardInk'
 import { particleSamplesForStroke } from '../drawing/particleStyle'
 import {
-  adaptiveResizeHandlePosition,
   resizeCardFromHandle,
   type CardGeometry,
   type CardResizeHandle,
 } from '../layout/cardResize'
 import { placeGroupSuggestionActions } from '../layout/groupSuggestionPlacement'
 import {
+  cardIdsInFreeform,
+  cardIdsInRectangle,
   selectionRect,
   strokeIdsInFreeform,
   strokeIdsInRectangle,
@@ -16,7 +17,7 @@ import {
 } from '../selection/strokeSelection'
 import { automaticEdgeAnchors, cardAnchorPoint, closestCardAnchor, MIN_CARD_SIZE } from '../store/workspaceDocument'
 import type { CalibrationUiState } from '../store/useAirNoteRuntime'
-import type { Edge, EdgeAnchor, IdeaCard, InputMode, Stroke, StrokeGroup, WorkspaceTool } from '../types/workspace'
+import type { Edge, EdgeAnchor, IdeaCard, InputMode, Stroke, StrokeGroup, TextCardStyle, WorkspaceTool } from '../types/workspace'
 
 interface WorkspaceCanvasProps {
   inputMode: InputMode
@@ -30,17 +31,22 @@ interface WorkspaceCanvasProps {
   currentGroup: StrokeGroup | null
   calibration: CalibrationUiState
   zoom: number
+  viewport: { x: number; y: number; zoom: number }
   onReady: (canvas: HTMLCanvasElement, cursor: HTMLElement) => void
   onPointerStart: (point: { x: number; y: number }, timestamp: number) => void
   onPointerMove: (point: { x: number; y: number }, timestamp: number) => void
   onPointerEnd: () => void
+  onEraseAtPoint: (point: { x: number; y: number }) => boolean
+  onPan: (x: number, y: number) => void
   onSuggestSelection: (strokeIds: string[]) => boolean
   onGenerateCard: () => void
   onContinueGroup: () => void
   onCancelGroup: () => void
   onMoveCard: (cardId: string, x: number, y: number, stage: { width: number; height: number }) => void
+  onMoveCards?: (moves: Array<{ cardId: string; x: number; y: number }>, stage: { width: number; height: number }) => void
   onResizeCard: (cardId: string, geometry: CardGeometry, stage: { width: number; height: number }) => void
   onRenameCard: (cardId: string, title: string) => void
+  onUpdateTextCard: (cardId: string, patch: { content?: string; textStyle?: Partial<TextCardStyle> }) => void
   onDeleteCard: (cardId: string) => void
   onCreateEdge: (sourceCardId: string, targetCardId: string, sourceAnchor: EdgeAnchor, targetAnchor: EdgeAnchor) => boolean
   onUpdateEdge: (edgeId: string, type: Edge['type']) => void
@@ -53,12 +59,13 @@ function canvasPoint(event: PointerEvent<HTMLCanvasElement>, zoom: number) {
 }
 
 interface CardDragPreview {
-  cardId: string
+  cardIds: string[]
   pointerId: number
-  startX: number
-  startY: number
-  x: number
-  y: number
+  startClientX: number
+  startClientY: number
+  deltaX: number
+  deltaY: number
+  origins: Record<string, { x: number; y: number }>
 }
 
 interface SelectionDraft {
@@ -69,6 +76,12 @@ interface SelectionDraft {
   points: SelectionPoint[]
 }
 
+interface PanDraft {
+  pointerId: number
+  startClient: { x: number; y: number }
+  startViewport: { x: number; y: number }
+}
+
 export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
   const { inputMode, tool, strokes, cards, edges, currentGroup, calibration, zoom } = props
   const stageRef = useRef<HTMLElement>(null)
@@ -76,6 +89,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
   const cursorRef = useRef<HTMLDivElement>(null)
   const [editingCardId, setEditingCardId] = useState<string | null>(null)
   const [draftTitle, setDraftTitle] = useState('')
+  const [textLengths, setTextLengths] = useState<Record<string, number>>({})
   const knownCardIdsRef = useRef(new Set(cards.map((card) => card.id)))
   const [drag, setDrag] = useState<CardDragPreview | null>(null)
   const dragRef = useRef<CardDragPreview | null>(null)
@@ -90,7 +104,9 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
   } | null>(null)
   const [edgeDraft, setEdgeDraft] = useState<{ sourceCardId: string; sourceAnchor: EdgeAnchor; x: number; y: number; targetCardId: string | null; targetAnchor: EdgeAnchor | null } | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+  const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(() => new Set())
   const [selection, setSelection] = useState<SelectionDraft | null>(null)
+  const [pan, setPan] = useState<PanDraft | null>(null)
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 })
 
   useEffect(() => {
@@ -130,7 +146,13 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     const knownCardIds = knownCardIdsRef.current
     const createdCard = cards.find((card) => !knownCardIds.has(card.id))
     knownCardIdsRef.current = new Set(cards.map((card) => card.id))
-    if (!createdCard || createdCard.title !== '未命名想法') return
+    setSelectedCardIds((current) => {
+      const available = new Set(cards.map((card) => card.id))
+      if (createdCard) return new Set([createdCard.id])
+      const next = new Set([...current].filter((id) => available.has(id)))
+      return next.size === current.size ? current : next
+    })
+    if (!createdCard || !['未命名想法', '未命名文字'].includes(createdCard.title)) return
     setEditingCardId(createdCard.id)
     setDraftTitle('')
   }, [cards])
@@ -138,9 +160,9 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
   const cardVisuals = useMemo(() => {
     const strokesById = new Map(strokes.map((stroke) => [stroke.id, stroke]))
     return new Map(cards.map((card) => {
-      const cardStrokes = card.strokeIds
+      const cardStrokes = card.kind === 'ink' ? card.strokeIds
         .map((strokeId) => strokesById.get(strokeId))
-        .filter((stroke): stroke is Stroke => Boolean(stroke))
+        .filter((stroke): stroke is Stroke => Boolean(stroke)) : []
       const particleSamples = new Map(
         cardStrokes
           .filter((stroke) => props.experimentalStylesEnabled && stroke.style === 'particle')
@@ -158,8 +180,11 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     ...card,
     position: resize?.cardId === card.id
       ? resize.geometry.position
-      : drag?.cardId === card.id
-        ? { x: drag.x, y: drag.y }
+      : drag?.origins[card.id]
+        ? {
+            x: drag.origins[card.id].x + drag.deltaX,
+            y: drag.origins[card.id].y + drag.deltaY,
+          }
         : card.position,
     size: resize?.cardId === card.id ? resize.geometry.size : card.size,
   })
@@ -176,13 +201,29 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
 
   const beginCardDrag = (event: PointerEvent<HTMLDivElement>, card: IdeaCard) => {
     if (tool !== 'select' || editingCardId === card.id || event.button !== 0) return
+    const nextSelected = new Set(selectedCardIds)
+    if (event.shiftKey) {
+      if (nextSelected.has(card.id)) nextSelected.delete(card.id)
+      else nextSelected.add(card.id)
+    } else if (!nextSelected.has(card.id)) {
+      nextSelected.clear()
+      nextSelected.add(card.id)
+    }
+    setSelectedCardIds(nextSelected)
+    setSelectedEdgeId(null)
+    if (!nextSelected.has(card.id)) return
+
+    const targets = cards.filter((item) => nextSelected.has(item.id))
+    const origins = Object.fromEntries(targets.map((item) => [item.id, { ...item.position }]))
     event.currentTarget.setPointerCapture(event.pointerId)
     const next = {
-      cardId: card.id,
+      cardIds: targets.map((item) => item.id),
       pointerId: event.pointerId,
-      startX: event.clientX - card.position.x,
-      startY: event.clientY - card.position.y,
-      ...card.position,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      deltaX: 0,
+      deltaY: 0,
+      origins,
     }
     dragRef.current = next
     setDrag(next)
@@ -193,8 +234,8 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     if (!current || current.pointerId !== event.pointerId) return
     const next = {
       ...current,
-      x: event.clientX - current.startX,
-      y: event.clientY - current.startY,
+      deltaX: (event.clientX - current.startClientX) / zoom,
+      deltaY: (event.clientY - current.startClientY) / zoom,
     }
     dragRef.current = next
     if (dragFrameRef.current !== null) return
@@ -218,8 +259,16 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
       }
       dragFrameRef.current = null
     }
-    if (!cancelled && stageRef.current) {
-      props.onMoveCard(current.cardId, current.x, current.y, { width: stageRef.current.clientWidth, height: stageRef.current.clientHeight })
+    const hasMoved = Math.abs(current.deltaX) > 0.5 || Math.abs(current.deltaY) > 0.5
+    if (!cancelled && hasMoved && stageRef.current) {
+      const moves = current.cardIds.map((cardId) => ({
+        cardId,
+        x: current.origins[cardId].x + current.deltaX,
+        y: current.origins[cardId].y + current.deltaY,
+      }))
+      const stage = { width: stageRef.current.clientWidth, height: stageRef.current.clientHeight }
+      if (moves.length > 1 && props.onMoveCards) props.onMoveCards(moves, stage)
+      else if (moves[0]) props.onMoveCard(moves[0].cardId, moves[0].x, moves[0].y, stage)
     }
     dragRef.current = null
     setDrag(null)
@@ -254,8 +303,8 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
         resize.startGeometry,
         resize.handle,
         {
-          x: event.clientX - resize.startPointer.x,
-          y: event.clientY - resize.startPointer.y,
+          x: (event.clientX - resize.startPointer.x) / zoom,
+          y: (event.clientY - resize.startPointer.y) / zoom,
         },
         { width: stage.clientWidth, height: stage.clientHeight },
         MIN_CARD_SIZE,
@@ -290,7 +339,10 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     const bounds = stageRef.current?.getBoundingClientRect()
     const hit = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-card-id]')
     const targetCardId = hit?.dataset.cardId ?? null
-    const point = { x: event.clientX - (bounds?.left ?? 0), y: event.clientY - (bounds?.top ?? 0) }
+    const point = {
+      x: (event.clientX - (bounds?.left ?? 0)) / zoom,
+      y: (event.clientY - (bounds?.top ?? 0)) / zoom,
+    }
     const targetCard = cards.find((card) => card.id === targetCardId)
     const explicitAnchor = hit?.dataset.anchorSide as EdgeAnchor | undefined
     const targetAnchor = targetCard && targetCardId !== edgeDraft.sourceCardId
@@ -313,9 +365,31 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
       props.onPointerStart(canvasPoint(event, zoom), event.timeStamp)
       return
     }
+    if (tool === 'erase') {
+      event.currentTarget.setPointerCapture(event.pointerId)
+      props.onEraseAtPoint(canvasPoint(event, zoom))
+      return
+    }
+    if (tool === 'pan') {
+      event.currentTarget.setPointerCapture(event.pointerId)
+      const viewport = props.viewport
+      setPan({
+        pointerId: event.pointerId,
+        startClient: { x: event.clientX, y: event.clientY },
+        startViewport: { x: viewport.x, y: viewport.y },
+      })
+      return
+    }
+    if (tool === 'select') {
+      setSelectedCardIds(new Set())
+      setSelectedEdgeId(null)
+      return
+    }
     if (tool !== 'lasso-rect' && tool !== 'lasso-free') return
     const point = canvasPoint(event, zoom)
     event.currentTarget.setPointerCapture(event.pointerId)
+    setSelectedCardIds(new Set())
+    setSelectedEdgeId(null)
     setSelection({
       pointerId: event.pointerId,
       mode: tool === 'lasso-rect' ? 'rect' : 'free',
@@ -329,6 +403,17 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
     if (tool === 'draw') {
       props.onPointerMove(canvasPoint(event, zoom), event.timeStamp)
+      return
+    }
+    if (tool === 'erase') {
+      props.onEraseAtPoint(canvasPoint(event, zoom))
+      return
+    }
+    if (tool === 'pan' && pan?.pointerId === event.pointerId) {
+      props.onPan(
+        pan.startViewport.x + event.clientX - pan.startClient.x,
+        pan.startViewport.y + event.clientY - pan.startClient.y,
+      )
       return
     }
     const point = canvasPoint(event, zoom)
@@ -350,12 +435,23 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
       props.onPointerEnd()
       return
     }
+    if (tool === 'erase') return
+    if (tool === 'pan') {
+      setPan(null)
+      return
+    }
     if (!selection || selection.pointerId !== event.pointerId) return
     if (!cancelled) {
       const end = canvasPoint(event, zoom)
+      const polygon = [...selection.points, end]
+      const rect = selectionRect(selection.start, end)
       const strokeIds = selection.mode === 'rect'
-        ? strokeIdsInRectangle(strokes, selectionRect(selection.start, end))
-        : strokeIdsInFreeform(strokes, [...selection.points, end])
+        ? strokeIdsInRectangle(strokes, rect)
+        : strokeIdsInFreeform(strokes, polygon)
+      const cardIds = selection.mode === 'rect'
+        ? cardIdsInRectangle(cards, rect)
+        : cardIdsInFreeform(cards, polygon)
+      setSelectedCardIds(new Set(cardIds))
       props.onSuggestSelection(strokeIds)
     }
     setSelection(null)
@@ -413,9 +509,9 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
         const preview = cardPreview(card)
         const visual = cardVisuals.get(card.id)
         const cardStrokes = visual?.cardStrokes ?? []
-        const ink = visual?.ink ?? null
+        const ink = card.kind === 'ink' ? visual?.ink ?? null : null
         return (
-          <article key={card.id} data-card-id={card.id} className={`idea-card ${edgeDraft?.targetCardId === card.id ? 'idea-card--edge-target' : ''}`} style={{ left: preview.position.x, top: preview.position.y, width: preview.size.width, height: preview.size.height }}>
+          <article key={card.id} data-card-id={card.id} className={`idea-card ${selectedCardIds.has(card.id) ? 'idea-card--selected' : ''} ${edgeDraft?.targetCardId === card.id ? 'idea-card--edge-target' : ''}`} style={{ left: preview.position.x, top: preview.position.y, width: preview.size.width, height: preview.size.height }}>
             <div className="idea-card__title" onPointerDown={(event) => beginCardDrag(event, card)} onPointerMove={moveCardPreview} onPointerUp={(event) => finishCardDrag(event, false)} onPointerCancel={(event) => finishCardDrag(event, true)} onDoubleClick={() => beginTitleEdit(card)}>
               {editingCardId === card.id ? (
                 <>
@@ -465,7 +561,54 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
                 })}
               </svg>
             ) : null}
-            <button className="idea-card__delete" type="button" aria-label={`删除卡片 ${card.title}`} onClick={() => props.onDeleteCard(card.id)}>×</button>
+            {card.kind === 'text' ? (
+              <div
+                className="idea-card__text"
+                style={{
+                  color: card.textStyle.color,
+                  fontWeight: card.textStyle.bold ? 700 : 400,
+                  fontStyle: card.textStyle.italic ? 'italic' : 'normal',
+                  textDecoration: card.textStyle.underline ? 'underline' : 'none',
+                }}
+              >
+                <div className="idea-card__formatting" aria-label="文字格式">
+                  <button type="button" aria-pressed={card.textStyle.bold} onClick={() => props.onUpdateTextCard(card.id, { textStyle: { bold: !card.textStyle.bold } })}>B</button>
+                  <button type="button" aria-pressed={card.textStyle.italic} onClick={() => props.onUpdateTextCard(card.id, { textStyle: { italic: !card.textStyle.italic } })}>I</button>
+                  <button type="button" aria-pressed={card.textStyle.underline} onClick={() => props.onUpdateTextCard(card.id, { textStyle: { underline: !card.textStyle.underline } })}>U</button>
+                  <input
+                    type="color"
+                    aria-label="文字颜色"
+                    value={card.textStyle.color}
+                    onChange={(event) => props.onUpdateTextCard(card.id, { textStyle: { color: event.target.value } })}
+                  />
+                </div>
+                <textarea
+                  key={card.content}
+                  aria-label={`编辑文字卡片 ${card.title}`}
+                  maxLength={5000}
+                  defaultValue={card.content}
+                  placeholder="输入正文…"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onInput={(event) => setTextLengths((current) => ({ ...current, [card.id]: event.currentTarget.value.length }))}
+                  onBlur={(event) => {
+                    props.onUpdateTextCard(card.id, { content: event.target.value })
+                    setTextLengths((current) => {
+                      const next = { ...current }
+                      delete next[card.id]
+                      return next
+                    })
+                  }}
+                />
+                <span className="idea-card__body-count">{textLengths[card.id] ?? card.content.length}/5000</span>
+              </div>
+            ) : null}
+            <button
+              className="idea-card__delete"
+              type="button"
+              aria-label={`删除卡片 ${card.title}`}
+              title="删除卡片及其内容"
+              onClick={() => props.onDeleteCard(card.id)}
+            >×</button>
             {(['top', 'right', 'bottom', 'left'] as EdgeAnchor[]).map((anchor) => (
               <button
                 key={anchor}
@@ -490,7 +633,6 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
               <button
                 key={handle}
                 className={`idea-card__resize idea-card__resize--${handle}`}
-                style={adaptiveResizeHandlePosition(preview, handle, stageSize)}
                 type="button"
                 hidden={tool !== 'select'}
                 aria-label={`从${label}调整卡片 ${card.title} 大小`}
@@ -522,7 +664,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
         </>
       ) : null}
       {calibration.phase === 'roi' ? <div className={`calibration-target calibration-target--${calibration.roiStep}`} aria-hidden="true">{calibration.roiStep + 1}</div> : null}
-      <div className="canvas-stage__notice"><p className="eyebrow">P1 STYLE-01 · P0 SAFE</p><h2 id="canvas-title">{tool === 'draw' ? (inputMode === 'mouse' ? '鼠标画笔已启用' : '捏合落笔，松开断笔') : tool === 'select' ? '选择卡片或从锚点连线' : tool === 'lasso-rect' ? '拖动矩形框选笔画' : '拖动自由套索选择笔画'}</h2><p>选区只显示生成建议，确认前不会创建卡片。实验视觉不改写原始 Stroke。</p>{tool === 'select' ? <label className="edge-type-control">{selectedEdgeId ? '所选连接' : '新连接类型'}<select value={selectedEdgeId ? edges.find((edge) => edge.id === selectedEdgeId)?.type ?? props.edgeType : props.edgeType} onChange={(event) => { const type = event.target.value as Edge['type']; if (selectedEdgeId) props.onUpdateEdge(selectedEdgeId, type); else props.onEdgeTypeChange(type) }}><option value="undirected">无方向</option><option value="directed">有方向</option></select></label> : null}</div>
+      <div className="canvas-stage__notice"><p className="eyebrow">P0 WORKSPACE</p><h2 id="canvas-title">{tool === 'draw' ? (inputMode === 'mouse' ? '鼠标画笔已启用' : '捏合落笔，松开断笔') : tool === 'erase' ? '整笔橡皮擦：点击或划过自由笔迹' : tool === 'pan' ? '拖动画布进行平移' : tool === 'select' ? (selectedCardIds.size > 1 ? `已选择 ${selectedCardIds.size} 张卡片，可整体移动` : '选择卡片或从锚点连线') : tool === 'lasso-rect' ? '拖动矩形框选笔画与卡片' : '拖动自由套索选择笔画与卡片'}</h2><p>按住 Shift 可增减卡片选择；实验视觉不改写原始 Stroke。</p>{tool === 'select' ? <label className="edge-type-control">{selectedEdgeId ? '所选连接' : '新连接类型'}<select value={selectedEdgeId ? edges.find((edge) => edge.id === selectedEdgeId)?.type ?? props.edgeType : props.edgeType} onChange={(event) => { const type = event.target.value as Edge['type']; if (selectedEdgeId) props.onUpdateEdge(selectedEdgeId, type); else props.onEdgeTypeChange(type) }}><option value="undirected">无方向</option><option value="directed">有方向</option></select></label> : null}</div>
       <div className="canvas-stage__coordinates" aria-hidden="true"><span>{inputMode.toUpperCase()}</span><span>{strokes.length} STROKES</span><span>{cards.length} CARDS / {edges.length} EDGES</span></div>
     </section>
   )

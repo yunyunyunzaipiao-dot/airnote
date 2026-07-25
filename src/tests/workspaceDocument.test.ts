@@ -5,13 +5,19 @@ import {
   cardAnchorPoint,
   createCardFromCurrentGroup,
   createEdge,
+  createTextCard,
   createWorkspaceDocument,
   deleteCard,
+  eraseStroke,
   moveCard,
+  moveCards,
   renameCard,
   resizeCard,
   suggestGroupFromSelection,
   suggestCurrentGroup,
+  strokeIdAtPoint,
+  updateTextCard,
+  updateViewport,
   updateEdgeType,
 } from '../store/workspaceDocument'
 import type { Stroke } from '../types/workspace'
@@ -55,6 +61,19 @@ describe('M2 workspace document', () => {
     expect(renameCard(moved, card.id, 'x'.repeat(120)).cards[0].title).toHaveLength(100)
   })
 
+  it('moves multiple cards as one immutable document operation', () => {
+    let document = createTextCard(createWorkspaceDocument(0), { x: 40, y: 50 })
+    document = createTextCard(document, { x: 280, y: 90 })
+    const pointsBefore = structuredClone(document.strokes.map((item) => item.points))
+    const moved = moveCards(document, [
+      { cardId: document.cards[0].id, x: 140, y: 150 },
+      { cardId: document.cards[1].id, x: 380, y: 190 },
+    ], { width: 800, height: 600 })
+    expect(moved.cards.map((card) => card.position)).toEqual([{ x: 140, y: 150 }, { x: 380, y: 190 }])
+    expect(document.cards.map((card) => card.position)).toEqual([{ x: 40, y: 50 }, { x: 280, y: 90 }])
+    expect(moved.strokes.map((item) => item.points)).toEqual(pointsBefore)
+  })
+
   it('resizes cards with minimum bounds and keeps them reachable', () => {
     const carded = createCardFromCurrentGroup(addStrokeToCurrentGroup(createWorkspaceDocument(0), stroke('s1')))!
     const card = carded.cards[0]
@@ -91,6 +110,40 @@ describe('M2 workspace document', () => {
     const deleted = deleteCard(linked, first.id)
     expect(deleted.cards).toHaveLength(1)
     expect(deleted.edges).toEqual([])
-    expect(deleted.strokes.find((item) => item.id === 's1')?.points).toHaveLength(2)
+    expect(deleted.strokes.find((item) => item.id === 's1')).toBeUndefined()
+    expect(deleted.strokes.find((item) => item.id === 's2')?.points).toHaveLength(2)
+  })
+
+  it('erases only a complete free Stroke and preserves carded Stroke geometry', () => {
+    const first = stroke('s1')
+    const cardedStroke = { ...stroke('s2', 100), cardId: 'card-1' }
+    const document = { ...createWorkspaceDocument(0), strokes: [first, cardedStroke] }
+    expect(strokeIdAtPoint(document, { x: 20, y: 20 })).toBe('s1')
+    expect(strokeIdAtPoint(document, { x: 110, y: 20 })).toBeNull()
+    const erased = eraseStroke(document, 's1')
+    expect(erased.strokes).toEqual([cardedStroke])
+    expect(cardedStroke.points).toEqual(stroke('s2', 100).points)
+  })
+
+  it('creates and updates a basic text card with safe limits', () => {
+    const created = createTextCard(createWorkspaceDocument(0), { x: 80, y: 90 })
+    expect(created.cards[0]).toMatchObject({ kind: 'text', title: '未命名文字', content: '' })
+    const updated = updateTextCard(created, created.cards[0].id, {
+      content: 'x'.repeat(5100),
+      textStyle: { bold: true, color: 'invalid' },
+    })
+    const card = updated.cards[0]
+    expect(card.kind).toBe('text')
+    if (card.kind !== 'text') return
+    expect(card.content).toHaveLength(5000)
+    expect(card.textStyle).toMatchObject({ bold: true, color: '#172B3A' })
+  })
+
+  it('clamps and stores viewport zoom without changing Stroke points', () => {
+    const document = { ...createWorkspaceDocument(0), strokes: [stroke('s1')] }
+    const points = structuredClone(document.strokes[0].points)
+    expect(updateViewport(document, { x: 30, y: -20, zoom: 9 }).workspace.viewport).toEqual({ x: 30, y: -20, zoom: 3 })
+    expect(updateViewport(document, { zoom: 0 }).workspace.viewport.zoom).toBe(0.25)
+    expect(document.strokes[0].points).toEqual(points)
   })
 })
