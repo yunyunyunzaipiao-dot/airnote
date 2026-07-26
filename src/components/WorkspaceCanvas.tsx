@@ -18,6 +18,7 @@ import {
 import { automaticEdgeAnchors, cardAnchorPoint, closestCardAnchor, MIN_CARD_SIZE } from '../store/workspaceDocument'
 import type { CalibrationUiState } from '../store/useAirNoteRuntime'
 import type { Edge, EdgeAnchor, IdeaCard, InputMode, Stroke, StrokeGroup, TextCardStyle, WorkspaceTool } from '../types/workspace'
+import { EdgeTypePicker } from './EdgeTypePicker'
 
 interface WorkspaceCanvasProps {
   inputMode: InputMode
@@ -51,6 +52,7 @@ interface WorkspaceCanvasProps {
   onCreateEdge: (sourceCardId: string, targetCardId: string, sourceAnchor: EdgeAnchor, targetAnchor: EdgeAnchor) => boolean
   onUpdateEdge: (edgeId: string, type: Edge['type']) => void
   onEdgeTypeChange: (type: Edge['type']) => void
+  onSelectionChange?: (selectedCardIds: string[]) => void
 }
 
 function canvasPoint(event: PointerEvent<HTMLCanvasElement>, zoom: number) {
@@ -103,11 +105,17 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     geometry: CardGeometry
   } | null>(null)
   const [edgeDraft, setEdgeDraft] = useState<{ sourceCardId: string; sourceAnchor: EdgeAnchor; x: number; y: number; targetCardId: string | null; targetAnchor: EdgeAnchor | null } | null>(null)
+  const [pendingEdgeDraft, setPendingEdgeDraft] = useState<{ sourceCardId: string; targetCardId: string; sourceAnchor: EdgeAnchor; targetAnchor: EdgeAnchor } | null>(null)
+  const [showEdgeTypePicker, setShowEdgeTypePicker] = useState(false)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(() => new Set())
   const [selection, setSelection] = useState<SelectionDraft | null>(null)
   const [pan, setPan] = useState<PanDraft | null>(null)
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 })
+
+  useEffect(() => {
+    props.onSelectionChange?.([...selectedCardIds])
+  }, [selectedCardIds, props.onSelectionChange])
 
   useEffect(() => {
     if (tool !== 'lasso-rect' && tool !== 'lasso-free') {
@@ -353,9 +361,33 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
 
   const finishEdge = () => {
     if (edgeDraft?.targetCardId && edgeDraft.targetAnchor) {
-      props.onCreateEdge(edgeDraft.sourceCardId, edgeDraft.targetCardId, edgeDraft.sourceAnchor, edgeDraft.targetAnchor)
+      setPendingEdgeDraft({
+        sourceCardId: edgeDraft.sourceCardId,
+        targetCardId: edgeDraft.targetCardId,
+        sourceAnchor: edgeDraft.sourceAnchor,
+        targetAnchor: edgeDraft.targetAnchor,
+      })
+      setShowEdgeTypePicker(true)
     }
     setEdgeDraft(null)
+  }
+
+  const confirmEdgeType = (type: Edge['type']) => {
+    if (!pendingEdgeDraft) return
+    props.onEdgeTypeChange(type)
+    props.onCreateEdge(
+      pendingEdgeDraft.sourceCardId,
+      pendingEdgeDraft.targetCardId,
+      pendingEdgeDraft.sourceAnchor,
+      pendingEdgeDraft.targetAnchor,
+    )
+    setPendingEdgeDraft(null)
+    setShowEdgeTypePicker(false)
+  }
+
+  const cancelEdgeType = () => {
+    setPendingEdgeDraft(null)
+    setShowEdgeTypePicker(false)
   }
 
   const beginCanvasAction = (event: PointerEvent<HTMLCanvasElement>) => {
@@ -535,15 +567,6 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
               ) : (
                 <>
                   <strong>{card.title}</strong>
-                  {!isCompact && (
-                    <button
-                      className="idea-card__text-entry"
-                      type="button"
-                      aria-label={`键盘输入卡片文字注释：${card.title}`}
-                      onPointerDown={(event) => event.stopPropagation()}
-                      onClick={() => beginTitleEdit(card)}
-                    >输入文字</button>
-                  )}
                 </>
               )}
             </div>
@@ -575,19 +598,6 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
                   textDecoration: card.textStyle.underline ? 'underline' : 'none',
                 }}
               >
-                {!isCompact && (
-                  <div className="idea-card__formatting" aria-label="文字格式">
-                    <button type="button" aria-pressed={card.textStyle.bold} onClick={() => props.onUpdateTextCard(card.id, { textStyle: { bold: !card.textStyle.bold } })}>B</button>
-                    <button type="button" aria-pressed={card.textStyle.italic} onClick={() => props.onUpdateTextCard(card.id, { textStyle: { italic: !card.textStyle.italic } })}>I</button>
-                    <button type="button" aria-pressed={card.textStyle.underline} onClick={() => props.onUpdateTextCard(card.id, { textStyle: { underline: !card.textStyle.underline } })}>U</button>
-                    <input
-                      type="color"
-                      aria-label="文字颜色"
-                      value={card.textStyle.color}
-                      onChange={(event) => props.onUpdateTextCard(card.id, { textStyle: { color: event.target.value } })}
-                    />
-                  </div>
-                )}
                 <textarea
                   key={card.content}
                   aria-label={`编辑文字卡片 ${card.title}`}
@@ -608,18 +618,8 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
                     })
                   }}
                 />
-                {!isCompact && <span className="idea-card__body-count">{textLengths[card.id] ?? card.content.length}/5000</span>}
               </div>
             ) : null}
-            {!isCompact && (
-              <button
-                className="idea-card__delete"
-                type="button"
-                aria-label={`删除卡片 ${card.title}`}
-                title="删除卡片及其内容"
-                onClick={() => props.onDeleteCard(card.id)}
-              >×</button>
-            )}
             {(['top', 'right', 'bottom', 'left'] as EdgeAnchor[]).map((anchor) => (
               <button
                 key={anchor}
@@ -675,7 +675,8 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
         </>
       ) : null}
       {calibration.phase === 'roi' ? <div className={`calibration-target calibration-target--${calibration.roiStep}`} aria-hidden="true">{calibration.roiStep + 1}</div> : null}
-      <div className="canvas-stage__notice"><p className="eyebrow">P0 WORKSPACE</p><h2 id="canvas-title">{tool === 'draw' ? (inputMode === 'mouse' ? '鼠标画笔已启用' : '捏合落笔，松开断笔') : tool === 'erase' ? '整笔橡皮擦：点击或划过自由笔迹' : tool === 'pan' ? '拖动画布进行平移' : tool === 'select' ? (selectedCardIds.size > 1 ? `已选择 ${selectedCardIds.size} 张卡片，可整体移动` : '选择卡片或从锚点连线') : tool === 'lasso-rect' ? '拖动矩形框选笔画与卡片' : '拖动自由套索选择笔画与卡片'}</h2><p>按住 Shift 可增减卡片选择；实验视觉不改写原始 Stroke。</p>{tool === 'select' ? <label className="edge-type-control">{selectedEdgeId ? '所选连接' : '新连接类型'}<select value={selectedEdgeId ? edges.find((edge) => edge.id === selectedEdgeId)?.type ?? props.edgeType : props.edgeType} onChange={(event) => { const type = event.target.value as Edge['type']; if (selectedEdgeId) props.onUpdateEdge(selectedEdgeId, type); else props.onEdgeTypeChange(type) }}><option value="undirected">无方向</option><option value="directed">有方向</option></select></label> : null}</div>
+      <EdgeTypePicker open={showEdgeTypePicker} onSelect={confirmEdgeType} onCancel={cancelEdgeType} />
+      <div className="canvas-stage__notice"><p className="eyebrow">P0 WORKSPACE</p><h2 id="canvas-title">{tool === 'draw' ? (inputMode === 'mouse' ? '鼠标画笔已启用' : '捏合落笔，松开断笔') : tool === 'erase' ? '整笔橡皮擦：点击或划过自由笔迹' : tool === 'pan' ? '拖动画布进行平移' : tool === 'select' ? (selectedCardIds.size > 1 ? `已选择 ${selectedCardIds.size} 张卡片，可整体移动` : '选择卡片或从锚点连线') : tool === 'lasso-rect' ? '拖动矩形框选笔画与卡片' : '拖动自由套索选择笔画与卡片'}</h2><p>按住 Shift 可增减卡片选择；实验视觉不改写原始 Stroke。</p></div>
       <div className="canvas-stage__coordinates" aria-hidden="true"><span>{inputMode.toUpperCase()}</span><span>{strokes.length} STROKES</span><span>{cards.length} CARDS / {edges.length} EDGES</span></div>
     </section>
   )

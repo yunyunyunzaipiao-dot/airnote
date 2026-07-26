@@ -3,9 +3,9 @@ interface ZoomControlProps {
   onZoomChange: (zoom: number) => void
 }
 
-const MIN_ZOOM = 0.25
-const MAX_ZOOM = 3
-const STEP = 0.25
+const MIN_ZOOM = 0.5
+const MAX_ZOOM = 1.5
+const STEP = 0.1
 
 export function ZoomControl({ zoom, onZoomChange }: ZoomControlProps) {
   const decrease = () => onZoomChange(Math.max(MIN_ZOOM, Math.round((zoom - STEP) * 100) / 100))

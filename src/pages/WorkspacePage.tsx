@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { CalibrationPanel } from '../components/CalibrationPanel'
 import { CameraConsentDialog } from '../components/CameraConsentDialog'
 import { CameraPreview } from '../components/CameraPreview'
+import { CardPropertyPanel } from '../components/CardPropertyPanel'
 import { GestureStatus } from '../components/GestureStatus'
 import { LeftToolbar } from '../components/LeftToolbar'
-import { hasCompletedOnboarding, OnboardingFlow } from '../components/OnboardingFlow'
 import { StatusCenter, useStatusCenter } from '../components/StatusCenter'
 import { TopBar } from '../components/TopBar'
 import { WorkspaceCanvas } from '../components/WorkspaceCanvas'
@@ -17,8 +17,8 @@ export function WorkspacePage() {
   const runtime = useAirNoteRuntime()
   const pointerEventsSupported = typeof window.PointerEvent !== 'undefined'
   const viewport = runtime.document.workspace.viewport
-  const [showOnboarding, setShowOnboarding] = useState(() => !hasCompletedOnboarding())
   const [showCameraConsent, setShowCameraConsent] = useState(false)
+  const [selectedCardIds, setSelectedCardIds] = useState<string[]>([])
   const statusCenter = useStatusCenter()
 
   useEffect(() => {
@@ -183,6 +183,7 @@ export function WorkspacePage() {
             onCreateEdge={runtime.commitEdge}
             onUpdateEdge={runtime.commitEdgeType}
             onEdgeTypeChange={runtime.setEdgeType}
+            onSelectionChange={setSelectedCardIds}
           />
         </div>
 
@@ -194,6 +195,13 @@ export function WorkspacePage() {
             onCapture={runtime.captureCalibrationSample}
             onConfirm={runtime.confirmCalibration}
             onSkip={runtime.skipCalibration}
+          />
+          <CardPropertyPanel
+            card={selectedCardIds.length === 1 ? runtime.document.cards.find((c) => c.id === selectedCardIds[0]) ?? null : null}
+            onRenameCard={runtime.commitCardRename}
+            onUpdateTextCard={runtime.commitTextCardUpdate}
+            onDeleteCard={runtime.commitCardDelete}
+            onClose={() => setSelectedCardIds([])}
           />
         </div>
         <ZoomControl zoom={viewport.zoom} onZoomChange={(zoom) => runtime.setViewport({ zoom })} />
@@ -215,7 +223,6 @@ export function WorkspacePage() {
           }}
         />
       ) : null}
-      {showOnboarding ? <OnboardingFlow onClose={() => setShowOnboarding(false)} /> : null}
     </main>
   )
 }
