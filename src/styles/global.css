@@ -606,7 +606,7 @@ select:focus-visible {
 .canvas-stage__notice {
   position: absolute;
   top: 36px;
-  right: 40px;
+  left: 40px;
   z-index: 2;
   max-width: 390px;
   padding: 14px 16px;
@@ -614,6 +614,7 @@ select:focus-visible {
   background: rgba(246, 241, 228, 0.86);
   backdrop-filter: blur(10px);
   pointer-events: none;
+  opacity: 0.7;
 }
 
 .canvas-stage__notice h2 {
@@ -1216,7 +1217,7 @@ select:focus-visible {
 
   @keyframes settle-in {
     from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    to { opacity: 0.7; transform: translateY(0); }
   }
 }
 
@@ -1470,6 +1471,7 @@ select:focus-visible {
 }
 
 .idea-card--selected {
+  z-index: 10;
   border-color: #0a84ff !important;
   box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.18), 0 14px 34px var(--ui-shadow) !important;
 }
@@ -1481,6 +1483,35 @@ select:focus-visible {
   color: var(--muted);
   font-size: 9px;
   pointer-events: none;
+}
+
+/* 小卡片适配：缩小控制元素，避免遮挡内容 */
+.idea-card--compact .idea-card__anchor,
+.idea-card--compact .idea-card__resize {
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+}
+
+.idea-card--compact .idea-card__anchor--top { top: -8px; left: calc(50% - 8px); }
+.idea-card--compact .idea-card__anchor--right { top: calc(50% - 8px); right: -8px; }
+.idea-card--compact .idea-card__anchor--bottom { bottom: -8px; left: calc(50% - 8px); }
+.idea-card--compact .idea-card__anchor--left { top: calc(50% - 8px); left: -8px; }
+
+.idea-card--mini .idea-card__anchor,
+.idea-card--mini .idea-card__resize {
+  width: 12px;
+  height: 12px;
+  font-size: 8px;
+}
+
+.idea-card--mini .idea-card__anchor--top { top: -6px; left: calc(50% - 6px); }
+.idea-card--mini .idea-card__anchor--right { top: calc(50% - 6px); right: -6px; }
+.idea-card--mini .idea-card__anchor--bottom { bottom: -6px; left: calc(50% - 6px); }
+.idea-card--mini .idea-card__anchor--left { top: calc(50% - 6px); left: -6px; }
+
+.idea-card--mini .idea-card__title strong {
+  font-size: 10px;
 }
 
 .onboarding-layer,

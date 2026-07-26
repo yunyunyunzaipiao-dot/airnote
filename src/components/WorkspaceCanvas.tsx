@@ -510,8 +510,10 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
         const visual = cardVisuals.get(card.id)
         const cardStrokes = visual?.cardStrokes ?? []
         const ink = card.kind === 'ink' ? visual?.ink ?? null : null
+        const isCompact = preview.size.width < 200 || preview.size.height < 160
+        const isMini = preview.size.width < 140 || preview.size.height < 110
         return (
-          <article key={card.id} data-card-id={card.id} className={`idea-card ${selectedCardIds.has(card.id) ? 'idea-card--selected' : ''} ${edgeDraft?.targetCardId === card.id ? 'idea-card--edge-target' : ''}`} style={{ left: preview.position.x, top: preview.position.y, width: preview.size.width, height: preview.size.height }}>
+          <article key={card.id} data-card-id={card.id} className={`idea-card ${selectedCardIds.has(card.id) ? 'idea-card--selected' : ''} ${edgeDraft?.targetCardId === card.id ? 'idea-card--edge-target' : ''} ${isCompact ? 'idea-card--compact' : ''} ${isMini ? 'idea-card--mini' : ''}`} style={{ left: preview.position.x, top: preview.position.y, width: preview.size.width, height: preview.size.height }}>
             <div className="idea-card__title" onPointerDown={(event) => beginCardDrag(event, card)} onPointerMove={moveCardPreview} onPointerUp={(event) => finishCardDrag(event, false)} onPointerCancel={(event) => finishCardDrag(event, true)} onDoubleClick={() => beginTitleEdit(card)}>
               {editingCardId === card.id ? (
                 <>
@@ -533,13 +535,15 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
               ) : (
                 <>
                   <strong>{card.title}</strong>
-                  <button
-                    className="idea-card__text-entry"
-                    type="button"
-                    aria-label={`键盘输入卡片文字注释：${card.title}`}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onClick={() => beginTitleEdit(card)}
-                  >输入文字</button>
+                  {!isCompact && (
+                    <button
+                      className="idea-card__text-entry"
+                      type="button"
+                      aria-label={`键盘输入卡片文字注释：${card.title}`}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={() => beginTitleEdit(card)}
+                    >输入文字</button>
+                  )}
                 </>
               )}
             </div>
@@ -571,17 +575,19 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
                   textDecoration: card.textStyle.underline ? 'underline' : 'none',
                 }}
               >
-                <div className="idea-card__formatting" aria-label="文字格式">
-                  <button type="button" aria-pressed={card.textStyle.bold} onClick={() => props.onUpdateTextCard(card.id, { textStyle: { bold: !card.textStyle.bold } })}>B</button>
-                  <button type="button" aria-pressed={card.textStyle.italic} onClick={() => props.onUpdateTextCard(card.id, { textStyle: { italic: !card.textStyle.italic } })}>I</button>
-                  <button type="button" aria-pressed={card.textStyle.underline} onClick={() => props.onUpdateTextCard(card.id, { textStyle: { underline: !card.textStyle.underline } })}>U</button>
-                  <input
-                    type="color"
-                    aria-label="文字颜色"
-                    value={card.textStyle.color}
-                    onChange={(event) => props.onUpdateTextCard(card.id, { textStyle: { color: event.target.value } })}
-                  />
-                </div>
+                {!isCompact && (
+                  <div className="idea-card__formatting" aria-label="文字格式">
+                    <button type="button" aria-pressed={card.textStyle.bold} onClick={() => props.onUpdateTextCard(card.id, { textStyle: { bold: !card.textStyle.bold } })}>B</button>
+                    <button type="button" aria-pressed={card.textStyle.italic} onClick={() => props.onUpdateTextCard(card.id, { textStyle: { italic: !card.textStyle.italic } })}>I</button>
+                    <button type="button" aria-pressed={card.textStyle.underline} onClick={() => props.onUpdateTextCard(card.id, { textStyle: { underline: !card.textStyle.underline } })}>U</button>
+                    <input
+                      type="color"
+                      aria-label="文字颜色"
+                      value={card.textStyle.color}
+                      onChange={(event) => props.onUpdateTextCard(card.id, { textStyle: { color: event.target.value } })}
+                    />
+                  </div>
+                )}
                 <textarea
                   key={card.content}
                   aria-label={`编辑文字卡片 ${card.title}`}
@@ -589,7 +595,10 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
                   defaultValue={card.content}
                   placeholder="输入正文…"
                   onPointerDown={(event) => event.stopPropagation()}
-                  onInput={(event) => setTextLengths((current) => ({ ...current, [card.id]: event.currentTarget.value.length }))}
+                  onInput={(event) => {
+                    const value = event.currentTarget.value
+                    setTextLengths((current) => ({ ...current, [card.id]: value.length }))
+                  }}
                   onBlur={(event) => {
                     props.onUpdateTextCard(card.id, { content: event.target.value })
                     setTextLengths((current) => {
@@ -599,22 +608,24 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
                     })
                   }}
                 />
-                <span className="idea-card__body-count">{textLengths[card.id] ?? card.content.length}/5000</span>
+                {!isCompact && <span className="idea-card__body-count">{textLengths[card.id] ?? card.content.length}/5000</span>}
               </div>
             ) : null}
-            <button
-              className="idea-card__delete"
-              type="button"
-              aria-label={`删除卡片 ${card.title}`}
-              title="删除卡片及其内容"
-              onClick={() => props.onDeleteCard(card.id)}
-            >×</button>
+            {!isCompact && (
+              <button
+                className="idea-card__delete"
+                type="button"
+                aria-label={`删除卡片 ${card.title}`}
+                title="删除卡片及其内容"
+                onClick={() => props.onDeleteCard(card.id)}
+              >×</button>
+            )}
             {(['top', 'right', 'bottom', 'left'] as EdgeAnchor[]).map((anchor) => (
               <button
                 key={anchor}
                 className={`idea-card__anchor idea-card__anchor--${anchor}`}
                 type="button"
-                hidden={tool !== 'select'}
+                style={{ pointerEvents: tool === 'select' ? 'auto' : 'none' }}
                 data-card-id={card.id}
                 data-anchor-side={anchor}
                 aria-label={`从 ${card.title} 的${anchor === 'top' ? '上方' : anchor === 'right' ? '右侧' : anchor === 'bottom' ? '下方' : '左侧'}连接点创建连接`}
@@ -634,7 +645,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
                 key={handle}
                 className={`idea-card__resize idea-card__resize--${handle}`}
                 type="button"
-                hidden={tool !== 'select'}
+                style={{ pointerEvents: tool === 'select' ? 'auto' : 'none' }}
                 aria-label={`从${label}调整卡片 ${card.title} 大小`}
                 onPointerDown={(event) => beginCardResize(event, card, handle)}
                 onPointerMove={moveCardResize}
