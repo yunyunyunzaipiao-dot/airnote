@@ -22,6 +22,12 @@ const PRESET_COLORS = [
   '#FF2D55', '#8E8E93', '#C7C7CC', '#FFFFFF',
 ]
 
+const STYLE_OPTIONS = [
+  { id: 'ink' as const, label: '墨迹', subtitle: '自然笔触' },
+  { id: 'glow' as const, label: '辉光', subtitle: '发光效果（实验）' },
+  { id: 'particle' as const, label: '粒子', subtitle: '散点效果（实验）' },
+]
+
 export function BrushPopover({
   brush,
   experimentalStylesEnabled,
@@ -79,19 +85,18 @@ export function BrushPopover({
       <div className="brush-popover__section">
         <span className="brush-popover__label">样式</span>
         <div className="brush-popover__styles">
-          {(['ink', 'glow', 'particle'] as const).map((style) => (
+          {STYLE_OPTIONS.map(({ id, label, subtitle }) => (
             <button
-              key={style}
+              key={id}
               type="button"
-              className={`brush-popover__style-btn ${brush.style === style ? 'is-active' : ''} ${(style === 'glow' || style === 'particle') && !experimentalStylesEnabled ? 'is-disabled' : ''}`}
-              aria-label={style === 'ink' ? '墨迹画笔' : style === 'glow' ? '辉光画笔' : '粒子画笔'}
-              aria-pressed={brush.style === style}
-              disabled={(style === 'glow' || style === 'particle') && !experimentalStylesEnabled}
-              onClick={() => onChange({ ...brush, style })}
+              className={`brush-popover__style-btn ${brush.style === id ? 'is-active' : ''} ${(id === 'glow' || id === 'particle') && !experimentalStylesEnabled ? 'is-disabled' : ''}`}
+              aria-label={`${label}画笔`}
+              aria-pressed={brush.style === id}
+              disabled={(id === 'glow' || id === 'particle') && !experimentalStylesEnabled}
+              onClick={() => onChange({ ...brush, style: id })}
             >
-              {style === 'ink' && '墨'}
-              {style === 'glow' && '辉'}
-              {style === 'particle' && '粒'}
+              <span className="brush-popover__style-label">{label}</span>
+              <span className="brush-popover__style-subtitle">{subtitle}</span>
             </button>
           ))}
         </div>

@@ -1,13 +1,17 @@
+import { useFocusTrap } from '../hooks/useFocusTrap'
+
 interface CameraConsentDialogProps {
   onConfirm: () => void
   onCancel: () => void
 }
 
 export function CameraConsentDialog({ onConfirm, onCancel }: CameraConsentDialogProps) {
+  const dialogRef = useFocusTrap(true)
+
   return (
     <div className="consent-layer" role="presentation">
       <button className="consent-backdrop" type="button" aria-label="取消启用摄像头" onClick={onCancel} />
-      <section className="consent-dialog" role="dialog" aria-modal="true" aria-labelledby="camera-consent-title">
+      <section ref={dialogRef} className="consent-dialog" role="dialog" aria-modal="true" aria-labelledby="camera-consent-title">
         <div className="consent-icon" aria-hidden="true">◉</div>
         <p className="consent-eyebrow">本地隐私保护</p>
         <h2 id="camera-consent-title">启用摄像头进行手势绘制</h2>

@@ -187,15 +187,19 @@ export function WorkspacePage() {
           />
         </div>
 
-        <div className="floating-right" aria-label="校准与属性面板">
-          <CalibrationPanel
-            calibration={runtime.calibration}
-            cameraRunning={runtime.uiState.cameraStatus === 'running'}
-            onBegin={runtime.beginCalibration}
-            onCapture={runtime.captureCalibrationSample}
-            onConfirm={runtime.confirmCalibration}
-            onSkip={runtime.skipCalibration}
-          />
+        {runtime.uiState.cameraStatus === 'running' && runtime.calibration.phase !== 'ready' && (
+          <div className="calibration-overlay" role="dialog" aria-modal="true" aria-label="手势校准">
+            <CalibrationPanel
+              calibration={runtime.calibration}
+              cameraRunning={runtime.uiState.cameraStatus === 'running'}
+              onBegin={runtime.beginCalibration}
+              onCapture={runtime.captureCalibrationSample}
+              onConfirm={runtime.confirmCalibration}
+              onSkip={runtime.skipCalibration}
+            />
+          </div>
+        )}
+        <div className="floating-right" aria-label="属性面板">
           <CardPropertyPanel
             card={selectedCardIds.length === 1 ? runtime.document.cards.find((c) => c.id === selectedCardIds[0]) ?? null : null}
             onRenameCard={runtime.commitCardRename}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 
 export const ONBOARDING_STORAGE_KEY = 'airnote-onboarding-done'
 
@@ -64,6 +65,7 @@ interface OnboardingFlowProps {
 export function OnboardingFlow({ onClose }: OnboardingFlowProps) {
   const [step, setStep] = useState(0)
   const current = STEPS[step]
+  const dialogRef = useFocusTrap(true)
 
   const finish = () => {
     saveOnboardingCompleted()
@@ -83,7 +85,7 @@ export function OnboardingFlow({ onClose }: OnboardingFlowProps) {
   return (
     <div className="onboarding-layer" role="presentation">
       <button className="onboarding-backdrop" type="button" aria-label="跳过新手引导" onClick={finish} />
-      <section className="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+      <section ref={dialogRef} className="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
         <button className="onboarding-close" type="button" aria-label="跳过并关闭新手引导" onClick={finish}>×</button>
         <div className="onboarding-visual">
           <span className="onboarding-count">{step + 1} / {STEPS.length}</span>
