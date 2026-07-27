@@ -192,6 +192,9 @@ export function WorkspacePage() {
             <CalibrationPanel
               calibration={runtime.calibration}
               cameraRunning={runtime.uiState.cameraStatus === 'running'}
+              streamRef={runtime.streamRef}
+              latestHandRef={runtime.latestHandRef}
+              calibrationDraftRef={runtime.calibrationDraftRef}
               onBegin={runtime.beginCalibration}
               onCapture={runtime.captureCalibrationSample}
               onConfirm={runtime.confirmCalibration}

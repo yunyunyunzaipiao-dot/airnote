@@ -2,6 +2,17 @@ import type { NormalizedPoint } from '../types/m0'
 import { DEFAULT_SETTINGS, type GestureSettings, type WritingROI } from '../types/workspace'
 
 export const ROI_TARGETS = ['左上', '右上', '右下', '左下'] as const
+
+/** Normalised target positions for the four ROI calibration corners.
+ *  These are guide markers shown on the camera preview so the user
+ *  knows where to move their index fingertip. */
+export const ROI_TARGET_POSITIONS: readonly NormalizedPoint[] = [
+  { x: 0.25, y: 0.25 }, // 左上
+  { x: 0.75, y: 0.25 }, // 右上
+  { x: 0.75, y: 0.75 }, // 右下
+  { x: 0.25, y: 0.75 }, // 左下
+]
+
 const SAFETY_MARGIN_RATIO = 0.08
 const MIN_ROI_SIZE = 0.25
 const PINCH_CONTACT_MARGIN = 0.08

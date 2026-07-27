@@ -82,6 +82,11 @@ export interface CalibrationUiState {
   message: string
 }
 
+export interface LatestHandData {
+  landmarks: NormalizedPoint[] | null
+  pinchRatio: number
+}
+
 const EMPTY_DIAGNOSTICS: RuntimeDiagnostics = {
   fps: 0,
   inferenceMs: 0,
@@ -151,7 +156,7 @@ export function useAirNoteRuntime() {
   const historyRef = useRef(history)
   const calibrationRef = useRef(calibration)
   const calibrationDraftRef = useRef<CalibrationDraft>(createCalibrationDraft())
-  const latestHandRef = useRef<{ point: NormalizedPoint; pinchRatio: number } | null>(null)
+  const latestHandRef = useRef<LatestHandData | null>(null)
   const diagnosticsRef = useRef(EMPTY_DIAGNOSTICS)
   const mountedRef = useRef(true)
   const frameCountRef = useRef(0)
@@ -264,9 +269,8 @@ export function useAirNoteRuntime() {
         const frame = tracker.detect(video, timestamp)
         const landmarks = frame.landmarks
         const pinchRatio = landmarks ? calculatePinchRatio(landmarks) : null
-        const indexTip = landmarks?.[8]
-        latestHandRef.current = indexTip && pinchRatio !== null
-          ? { point: indexTip, pinchRatio }
+        latestHandRef.current = landmarks && pinchRatio !== null
+          ? { landmarks, pinchRatio }
           : null
 
         const calibrationPhase = calibrationRef.current.phase
@@ -629,7 +633,7 @@ export function useAirNoteRuntime() {
 
     const draft = calibrationDraftRef.current
     if (current.phase === 'roi') {
-      draft.roiPoints.push(latest.point)
+      draft.roiPoints.push(latest.landmarks![8])
       if (draft.roiPoints.length < 4) {
         const roiStep = draft.roiPoints.length
         publishCalibration({ ...current, roiStep, message: `把食指移到${ROI_TARGETS[roiStep]}目标后记录。` })
@@ -1025,6 +1029,9 @@ export function useAirNoteRuntime() {
     canUndo: history.undoStack.length > 0,
     canRedo: history.redoStack.length > 0,
     videoRef,
+    streamRef,
+    latestHandRef,
+    calibrationDraftRef,
     enableCamera,
     disableCamera,
     setInputMode,

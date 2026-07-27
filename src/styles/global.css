@@ -4539,6 +4539,10 @@ body {
   color: #6e6e73;
 }
 
+:root[data-ui-theme='night'] .calibration-preview {
+  background: #0a0a0a;
+}
+
 /* Selection layer night mode */
 :root[data-ui-theme='night'] .selection-layer rect,
 :root[data-ui-theme='night'] .selection-layer polyline {
@@ -4775,5 +4779,34 @@ body {
   justify-content: center;
   background: rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(6px);
+}
+
+/* ── Calibration live preview ── */
+
+.calibration-preview {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  aspect-ratio: 4 / 3;
+  margin: 0 auto 12px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #111;
+}
+
+.calibration-preview-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  display: block;
+}
+
+.calibration-preview-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
