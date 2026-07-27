@@ -132,15 +132,16 @@ export function CalibrationPanel({
   roiStepRef.current = calibration.roiStep
 
   /* ── Set up preview video (shares the same MediaStream) ── */
+  // Use a callback ref so the stream is attached whenever the <video>
+  // element mounts — even if it appears later (phase change from
+  // 'required' to 'roi'). A plain useEffect would miss this because
+  // the video element doesn't exist on the initial mount.
 
-  useEffect(() => {
-    const video = previewVideoRef.current
-    const stream = streamRef.current
-    if (!video || !stream) return
-    video.srcObject = stream
-    video.play().catch(() => {/* auto-play may be blocked briefly */})
-    return () => {
-      video.srcObject = null
+  const attachStreamToVideo = useCallback((el: HTMLVideoElement | null) => {
+    previewVideoRef.current = el
+    if (el && streamRef.current && el.srcObject !== streamRef.current) {
+      el.srcObject = streamRef.current
+      el.play().catch(() => {/* auto-play may be blocked briefly */})
     }
   }, [streamRef])
 
@@ -406,7 +407,7 @@ export function CalibrationPanel({
       {showVisualization && (
         <div className="calibration-preview">
           <video
-            ref={previewVideoRef}
+            ref={attachStreamToVideo}
             muted
             playsInline
             className="calibration-preview-video"
