@@ -2,6 +2,29 @@
 
 AirNote 的正式版本变化记录。项目采用语义化版本号；未成立的开发过程记录见 `docs/progress/`。
 
+## [0.5.0-m4.2] - 2026-07-27
+
+### 修复
+
+- **earthy 遗留 Token 清理**：删除 `:root` 中 earthy 系统的旧颜色定义（`#132126`、`#e8e4d8`、`#f6f1e4`、`#173f5f`、`#d94a32`、`#6f756f`），`body` 背景从 earthy 渐变改为 `var(--ui-body)`；批量替换 5 组散落在组件中的 earthy rgba 硬编码为 whimsical 对应色值。
+- **CSS 遗留系统清理**：彻底删除 modern creator workspace 和 graphite frame 两套竞争 CSS 系统，`global.css` 从 6197 行精简至 4779 行，消除样式层叠冲突。
+- **硬编码颜色 Token 化**：将 `#0A84FF`、`#FF453A`、`#30A46C`、`#1D1D1F`、`#6E6E73`、`#ffffff`、`#2C2C2E` 等数十处硬编码色值替换为语义化 CSS 变量（`--blue`、`--red`、`--green`、`--ink`、`--muted`、`--paper`、`--ui-card`）。
+- **移除 side-tab 反模式**：`.idea-card`、`.status-toast`、`.inline-error`、`.gesture-readout` 的左侧粗色边线改为 `1px solid var(--line)` 统一边框 + 圆角阴影。
+- **性能动画修复**：`.onboarding-dot` 从 `width` 过渡改为 `transform: scaleX()`，消除布局抖动。
+- **字号可读性**：修复 `7.5px` → `11px`、`9px` → `10px` 等违反无障碍标准的过小字号。
+
+### 变更
+
+- **画笔选择器描述化**：`BrushPopover` 选项从单字按钮（墨/辉/粒）改为带副标题的完整标签（"墨迹 / 自然笔触"等）。
+- **校准面板模态化**：`CalibrationPanel` 从右侧边栏移出，改为条件渲染的居中模态覆盖层，避免遮挡属性面板。
+- **模态焦点陷阱**：新建 `useFocusTrap` Hook 并应用于 `OnboardingFlow` 和 `CameraConsentDialog`，支持 Tab 循环和关闭后焦点恢复。
+- **占位文案更新**：`index.html` meta description 改为正式产品描述。
+
+### 验证
+
+- `npm run typecheck` 通过。
+- `detect.mjs` 设计检测器仅报告 2 个 advisory/warning 级别 findings（CSS 三角形箭头、画布网格背景），均已确认为 intentional 设计。
+
 ## [0.5.0-m4.1] - 2026-07-17
 
 ### 里程碑
