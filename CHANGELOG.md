@@ -2,6 +2,30 @@
 
 AirNote 的正式版本变化记录。项目采用语义化版本号；未成立的开发过程记录见 `docs/progress/`。
 
+## [0.5.0-m4.3] - 2026-07-28
+
+### 新增
+
+- **校准面板实时手部追踪可视化**：`CalibrationPanel` 从纯文字引导升级为视频预览 + Canvas overlay 实时绘制，解决用户"盲按"问题。
+  - ROI 阶段：十字准星目标标记（当前目标脉冲动画）、已记录点蓝色圆点、食指尖追踪光点、手部骨架（食指高亮）。
+  - Pinch 阶段：拇指+食指高亮连线、拇指-食指虚线距离指示、右侧捏合比例渐变进度条。
+  - Review 阶段：ROI 四边形边界预览 + "书写区域"标注。
+  - 手不可见时显示红色警告 "⚠ 手不在画面中"。
+- **重新校准入口**：`CameraPreview` 侧栏新增 "重新校准" 按钮（校准完成后出现），解决校准一次后无法再次打开的问题。
+
+### 修复
+
+- **提示词跟随拖动**：`.canvas-stage__notice` 从 `.workspace-zoom-container` 内移出到 `.workspace-layout` 同级，使提示文字不再随画布平移/缩放移动。
+- **工具栏图标偏右**：`.floating-sidebar` 宽度从 46px 调整为 48px（内容盒容纳 34px 按钮），`.left-toolbar` 补加 `display: flex` 使 `flex-direction` 和 `gap` 生效。
+- **主题面板被工具栏遮挡**：`.top-bar` z-index 从 30 提升至 50，`.calibration-overlay` z-index 从 50 提升至 60。新层级：workspace < sidebar(40) < top-bar(50) < overlay(60)。
+- **校准覆盖层模糊摄像头画面**：移除 `.calibration-overlay` 的 `backdrop-filter: blur(6px)`，仅保留 `rgba(0,0,0,0.35)` 遮罩层。
+- **预览视频流附加时序问题**：`CalibrationPanel` 视频流从 `useEffect` 改为 `useCallback` callback ref，确保 `<video>` 元素延迟挂载时仍能正确附加 MediaStream。
+
+### 变更
+
+- `useAirNoteRuntime` 的 `latestHandRef` 类型从 `{ point, pinchRatio }` 扩展为 `{ landmarks, pinchRatio }`，暴露完整 21 个手部关键点供 Canvas 绘制使用。
+- `calibration.ts` 新增 `ROI_TARGET_POSITIONS` 常量（4 个标准化目标坐标）。
+
 ## [0.5.0-m4.2] - 2026-07-27
 
 ### 修复
