@@ -179,10 +179,13 @@ export function updateTextCard(
 
 export function moveCard(document: WorkspaceDocument, cardId: string, x: number, y: number, stage: { width: number; height: number }) {
   const card = document.cards.find((item) => item.id === cardId)
-  if (!card) return document
-  const nextX = Math.min(stage.width - 24, Math.max(24 - card.size.width, x))
-  const nextY = Math.min(stage.height - 24, Math.max(24 - card.size.height, y))
-  return touch({ ...document, cards: document.cards.map((item) => item.id === cardId ? { ...item, position: { x: nextX, y: nextY } } : item) })
+  if (!card || ![x, y, stage.width, stage.height].every(Number.isFinite)) return document
+  return touch({
+    ...document,
+    cards: document.cards.map((item) => item.id === cardId
+      ? { ...item, position: { x, y } }
+      : item),
+  })
 }
 
 export function moveCards(
@@ -195,8 +198,7 @@ export function moveCards(
   const cards = document.cards.map((card) => {
     const move = moveById.get(card.id)
     if (!move || ![move.x, move.y, stage.width, stage.height].every(Number.isFinite)) return card
-    const x = Math.min(stage.width - 24, Math.max(24 - card.size.width, move.x))
-    const y = Math.min(stage.height - 24, Math.max(24 - card.size.height, move.y))
+    const { x, y } = move
     if (x === card.position.x && y === card.position.y) return card
     changed = true
     return { ...card, position: { x, y } }
@@ -227,8 +229,8 @@ export function resizeCard(
     height: Math.min(Math.max(MIN_CARD_SIZE.height, geometry.size.height), Math.max(MIN_CARD_SIZE.height, stage.height)),
   }
   const position = {
-    x: Math.min(stage.width - 24, Math.max(24 - size.width, geometry.position.x)),
-    y: Math.min(stage.height - 24, Math.max(24 - size.height, geometry.position.y)),
+    x: geometry.position.x,
+    y: geometry.position.y,
   }
   return touch({
     ...document,
@@ -303,7 +305,11 @@ export function updateViewport(
   viewport: Partial<WorkspaceDocument['workspace']['viewport']>,
 ) {
   const current = document.workspace.viewport
-  const zoom = Number.isFinite(viewport.zoom) ? Math.min(3, Math.max(0.25, viewport.zoom!)) : current.zoom
+  const zoom = viewport.zoom === undefined
+    ? current.zoom
+    : Number.isFinite(viewport.zoom)
+      ? Math.min(3, Math.max(0.25, viewport.zoom))
+      : 1
   const x = Number.isFinite(viewport.x) ? viewport.x! : current.x
   const y = Number.isFinite(viewport.y) ? viewport.y! : current.y
   return touch({ ...document, workspace: { ...document.workspace, viewport: { x, y, zoom } } })

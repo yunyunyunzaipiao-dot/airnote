@@ -46,6 +46,19 @@ describe('stroke canvas renderer', () => {
     expect(context.stroke).toHaveBeenCalled()
   })
 
+  it('maps gesture input through an unbounded viewport without rewriting world coordinates', () => {
+    const { renderer, context } = createRenderer()
+    renderer.setViewport({ x: 20, y: -10, zoom: 2 })
+    renderer.handleGesture({ type: 'START_STROKE', point: { x: 0.5, y: 0.5 }, timestamp: 10 })
+    renderer.handleGesture({ type: 'APPEND_POINT', point: { x: 0.2, y: 0.8 }, timestamp: 20 })
+    const stroke = renderer.handleGesture({ type: 'END_STROKE', reason: 'pinch-up' })
+
+    expect(stroke?.points[0]).toMatchObject({ x: 15, y: 30, t: 10 })
+    expect(stroke?.points[1].x).toBeGreaterThan(15)
+    expect(stroke?.points[1].y).toBeGreaterThan(30)
+    expect(context.setTransform).toHaveBeenCalledWith(2, 0, 0, 2, 20, -10)
+  })
+
   it('stabilizes the hover cursor before drawing starts', () => {
     const { renderer } = createRenderer()
     const cursor = document.createElement('div')

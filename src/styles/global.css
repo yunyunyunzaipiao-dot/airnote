@@ -3158,6 +3158,24 @@ body {
   background: var(--ui-canvas);
 }
 
+.workspace-zoom-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.workspace-world {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  transform-origin: top left;
+}
+
+.workspace-world .idea-card {
+  pointer-events: auto;
+}
+
 .workspace-primary {
   position: absolute;
   inset: 0;
@@ -3279,11 +3297,34 @@ body {
 
 .tool-action--icon,
 .tool-popover button {
+  display: grid;
+  place-items: center;
+  place-content: center;
+  justify-content: center;
   width: 34px;
   min-width: 34px;
   height: 34px;
   min-height: 34px;
+  padding: 0;
   border-radius: 10px;
+}
+
+.idea-card--draggable {
+  cursor: grab;
+}
+
+.idea-card--draggable:active {
+  cursor: grabbing;
+}
+
+.idea-card--draggable .idea-card__title {
+  cursor: inherit;
+}
+
+.idea-card--draggable input,
+.idea-card--draggable textarea,
+.idea-card--draggable button {
+  cursor: auto;
 }
 
 .tool-action--icon svg,

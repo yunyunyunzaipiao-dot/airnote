@@ -53,11 +53,12 @@ describe('M2 workspace document', () => {
     expect(suggested.strokes[0].points).toEqual(first.points)
   })
 
-  it('moves cards within the 24px visible boundary and caps titles', () => {
+  it('moves cards to any finite workspace coordinate and caps titles', () => {
     const carded = createCardFromCurrentGroup(addStrokeToCurrentGroup(createWorkspaceDocument(0), stroke('s1')))!
     const card = carded.cards[0]
     const moved = moveCard(carded, card.id, 5000, 5000, { width: 800, height: 600 })
-    expect(moved.cards[0].position).toEqual({ x: 776, y: 576 })
+    expect(moved.cards[0].position).toEqual({ x: 5000, y: 5000 })
+    expect(moveCard(moved, card.id, Number.NaN, 10, { width: 800, height: 600 })).toBe(moved)
     expect(renameCard(moved, card.id, 'x'.repeat(120)).cards[0].title).toHaveLength(100)
   })
 
@@ -74,7 +75,7 @@ describe('M2 workspace document', () => {
     expect(moved.strokes.map((item) => item.points)).toEqual(pointsBefore)
   })
 
-  it('resizes cards with minimum bounds and keeps them reachable', () => {
+  it('resizes cards with minimum size without clamping their workspace position', () => {
     const carded = createCardFromCurrentGroup(addStrokeToCurrentGroup(createWorkspaceDocument(0), stroke('s1')))!
     const card = carded.cards[0]
     const resized = resizeCard(carded, card.id, {
@@ -82,7 +83,7 @@ describe('M2 workspace document', () => {
       size: { width: 20, height: 30 },
     }, { width: 800, height: 600 })
     expect(resized.cards[0].size).toEqual({ width: 120, height: 96 })
-    expect(resized.cards[0].position).toEqual({ x: -96, y: -72 })
+    expect(resized.cards[0].position).toEqual({ x: -500, y: -400 })
     expect(resized.strokes[0].points).toEqual(carded.strokes[0].points)
   })
 
@@ -144,6 +145,8 @@ describe('M2 workspace document', () => {
     const points = structuredClone(document.strokes[0].points)
     expect(updateViewport(document, { x: 30, y: -20, zoom: 9 }).workspace.viewport).toEqual({ x: 30, y: -20, zoom: 3 })
     expect(updateViewport(document, { zoom: 0 }).workspace.viewport.zoom).toBe(0.25)
+    expect(updateViewport(updateViewport(document, { zoom: 2 }), { x: 40 }).workspace.viewport.zoom).toBe(2)
+    expect(updateViewport(document, { zoom: Number.NaN }).workspace.viewport.zoom).toBe(1)
     expect(document.strokes[0].points).toEqual(points)
   })
 })

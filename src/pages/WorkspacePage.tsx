@@ -141,17 +141,7 @@ export function WorkspacePage() {
           />
         </div>
 
-        <div
-          className="workspace-zoom-container"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: `${100 / viewport.zoom}%`,
-            height: `${100 / viewport.zoom}%`,
-            transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
-            transformOrigin: 'top left',
-          }}
-        >
+        <div className="workspace-zoom-container">
           <WorkspaceCanvas
             inputMode={runtime.settings.inputMode}
             experimentalStylesEnabled={runtime.settings.experimentalStylesEnabled}

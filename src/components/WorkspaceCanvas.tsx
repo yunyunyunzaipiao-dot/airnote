@@ -55,9 +55,20 @@ interface WorkspaceCanvasProps {
   onSelectionChange?: (selectedCardIds: string[]) => void
 }
 
-function canvasPoint(event: PointerEvent<HTMLCanvasElement>, zoom: number) {
+function canvasPoint(
+  event: PointerEvent<HTMLCanvasElement>,
+  viewport: { x: number; y: number; zoom: number },
+) {
   const bounds = event.currentTarget.getBoundingClientRect()
-  return { x: (event.clientX - bounds.left) / zoom, y: (event.clientY - bounds.top) / zoom }
+  return {
+    x: (event.clientX - bounds.left - viewport.x) / viewport.zoom,
+    y: (event.clientY - bounds.top - viewport.y) / viewport.zoom,
+  }
+}
+
+function blocksCardDrag(target: EventTarget | null) {
+  return target instanceof Element
+    && Boolean(target.closest('input, textarea, button, select, a, [contenteditable="true"]'))
 }
 
 interface CardDragPreview {
@@ -85,13 +96,12 @@ interface PanDraft {
 }
 
 export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
-  const { inputMode, tool, strokes, cards, edges, currentGroup, calibration, zoom } = props
+  const { inputMode, tool, strokes, cards, edges, currentGroup, calibration, zoom, viewport } = props
   const stageRef = useRef<HTMLElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const cursorRef = useRef<HTMLDivElement>(null)
   const [editingCardId, setEditingCardId] = useState<string | null>(null)
   const [draftTitle, setDraftTitle] = useState('')
-  const [textLengths, setTextLengths] = useState<Record<string, number>>({})
   const knownCardIdsRef = useRef(new Set(cards.map((card) => card.id)))
   const [drag, setDrag] = useState<CardDragPreview | null>(null)
   const dragRef = useRef<CardDragPreview | null>(null)
@@ -207,8 +217,13 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     setDraftTitle(card.title === '未命名想法' ? '' : card.title)
   }
 
-  const beginCardDrag = (event: PointerEvent<HTMLDivElement>, card: IdeaCard) => {
-    if (tool !== 'select' || editingCardId === card.id || event.button !== 0) return
+  const beginCardDrag = (event: PointerEvent<HTMLElement>, card: IdeaCard) => {
+    if (
+      tool !== 'select'
+      || editingCardId === card.id
+      || event.button !== 0
+      || blocksCardDrag(event.target)
+    ) return
     const nextSelected = new Set(selectedCardIds)
     if (event.shiftKey) {
       if (nextSelected.has(card.id)) nextSelected.delete(card.id)
@@ -237,7 +252,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     setDrag(next)
   }
 
-  const moveCardPreview = (event: PointerEvent<HTMLDivElement>) => {
+  const moveCardPreview = (event: PointerEvent<HTMLElement>) => {
     const current = dragRef.current
     if (!current || current.pointerId !== event.pointerId) return
     const next = {
@@ -256,7 +271,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     })
   }
 
-  const finishCardDrag = (event: PointerEvent<HTMLDivElement>, cancelled: boolean) => {
+  const finishCardDrag = (event: PointerEvent<HTMLElement>, cancelled: boolean) => {
     const current = dragRef.current
     if (!current || current.pointerId !== event.pointerId) return
     if (dragFrameRef.current !== null) {
@@ -305,6 +320,10 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     if (!resize || resize.pointerId !== event.pointerId) return
     const stage = stageRef.current
     if (!stage) return
+    const worldStage = {
+      width: stage.clientWidth / zoom,
+      height: stage.clientHeight / zoom,
+    }
     setResize({
       ...resize,
       geometry: resizeCardFromHandle(
@@ -314,7 +333,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
           x: (event.clientX - resize.startPointer.x) / zoom,
           y: (event.clientY - resize.startPointer.y) / zoom,
         },
-        { width: stage.clientWidth, height: stage.clientHeight },
+        worldStage,
         MIN_CARD_SIZE,
       ),
     })
@@ -326,7 +345,10 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
       props.onResizeCard(
         resize.cardId,
         resize.geometry,
-        { width: stageRef.current.clientWidth, height: stageRef.current.clientHeight },
+        {
+          width: stageRef.current.clientWidth / zoom,
+          height: stageRef.current.clientHeight / zoom,
+        },
       )
     }
     setResize(null)
@@ -348,8 +370,8 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     const hit = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-card-id]')
     const targetCardId = hit?.dataset.cardId ?? null
     const point = {
-      x: (event.clientX - (bounds?.left ?? 0)) / zoom,
-      y: (event.clientY - (bounds?.top ?? 0)) / zoom,
+      x: (event.clientX - (bounds?.left ?? 0) - viewport.x) / zoom,
+      y: (event.clientY - (bounds?.top ?? 0) - viewport.y) / zoom,
     }
     const targetCard = cards.find((card) => card.id === targetCardId)
     const explicitAnchor = hit?.dataset.anchorSide as EdgeAnchor | undefined
@@ -394,12 +416,12 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     if (inputMode !== 'mouse' || event.button !== 0) return
     if (tool === 'draw') {
       event.currentTarget.setPointerCapture(event.pointerId)
-      props.onPointerStart(canvasPoint(event, zoom), event.timeStamp)
+      props.onPointerStart(canvasPoint(event, viewport), event.timeStamp)
       return
     }
     if (tool === 'erase') {
       event.currentTarget.setPointerCapture(event.pointerId)
-      props.onEraseAtPoint(canvasPoint(event, zoom))
+      props.onEraseAtPoint(canvasPoint(event, viewport))
       return
     }
     if (tool === 'pan') {
@@ -418,7 +440,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
       return
     }
     if (tool !== 'lasso-rect' && tool !== 'lasso-free') return
-    const point = canvasPoint(event, zoom)
+    const point = canvasPoint(event, viewport)
     event.currentTarget.setPointerCapture(event.pointerId)
     setSelectedCardIds(new Set())
     setSelectedEdgeId(null)
@@ -434,11 +456,11 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
   const moveCanvasAction = (event: PointerEvent<HTMLCanvasElement>) => {
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
     if (tool === 'draw') {
-      props.onPointerMove(canvasPoint(event, zoom), event.timeStamp)
+      props.onPointerMove(canvasPoint(event, viewport), event.timeStamp)
       return
     }
     if (tool === 'erase') {
-      props.onEraseAtPoint(canvasPoint(event, zoom))
+      props.onEraseAtPoint(canvasPoint(event, viewport))
       return
     }
     if (tool === 'pan' && pan?.pointerId === event.pointerId) {
@@ -448,7 +470,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
       )
       return
     }
-    const point = canvasPoint(event, zoom)
+    const point = canvasPoint(event, viewport)
     setSelection((current) => {
       if (!current || current.pointerId !== event.pointerId) return current
       return {
@@ -474,7 +496,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
     }
     if (!selection || selection.pointerId !== event.pointerId) return
     if (!cancelled) {
-      const end = canvasPoint(event, zoom)
+      const end = canvasPoint(event, viewport)
       const polygon = [...selection.points, end]
       const rect = selectionRect(selection.start, end)
       const strokeIds = selection.mode === 'rect'
@@ -490,7 +512,26 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
   }
 
   const groupActionPosition = currentGroup?.status === 'suggested'
-    ? placeGroupSuggestionActions(currentGroup.boundingBox, stageSize)
+    ? (() => {
+        const visibleWorld = {
+          x: -viewport.x / zoom,
+          y: -viewport.y / zoom,
+          width: stageSize.width / zoom,
+          height: stageSize.height / zoom,
+        }
+        const relativePosition = placeGroupSuggestionActions(
+          {
+            ...currentGroup.boundingBox,
+            x: currentGroup.boundingBox.x - visibleWorld.x,
+            y: currentGroup.boundingBox.y - visibleWorld.y,
+          },
+          { width: visibleWorld.width, height: visibleWorld.height },
+        )
+        return {
+          left: relativePosition.left + visibleWorld.x,
+          top: relativePosition.top + visibleWorld.y,
+        }
+      })()
     : null
 
   return (
@@ -506,17 +547,24 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
         onPointerUp={(event) => finishCanvasAction(event, false)}
         onPointerCancel={(event) => finishCanvasAction(event, true)}
       />
-      {selection ? (
-        <svg className="selection-layer" aria-hidden="true">
+      <div ref={cursorRef} className="tracking-cursor" hidden aria-hidden="true" />
+      <div
+        className="workspace-world"
+        style={{
+          transform: `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.zoom})`,
+        }}
+      >
+        {selection ? (
+          <svg className="selection-layer" aria-hidden="true">
           {selection.mode === 'rect' ? (() => {
             const rect = selectionRect(selection.start, selection.current)
             return <rect x={rect.x} y={rect.y} width={rect.width} height={rect.height} />
           })() : (
             <polyline points={selection.points.map((point) => `${point.x},${point.y}`).join(' ')} />
           )}
-        </svg>
-      ) : null}
-      <svg className="edge-layer" aria-label="卡片连接线">
+          </svg>
+        ) : null}
+        <svg className="edge-layer" aria-label="卡片连接线">
         <defs><marker id="edge-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker></defs>
         {edges.map((edge) => {
           const source = cards.find((card) => card.id === edge.sourceCardId)
@@ -535,9 +583,8 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
           const start = cardAnchorPoint(cardPreview(source), edgeDraft.sourceAnchor)
           return <line className="edge-preview" x1={start.x} y1={start.y} x2={edgeDraft.x} y2={edgeDraft.y} />
         })() : null}
-      </svg>
-      <div ref={cursorRef} className="tracking-cursor" hidden aria-hidden="true" />
-      {cards.map((card) => {
+        </svg>
+        {cards.map((card) => {
         const preview = cardPreview(card)
         const visual = cardVisuals.get(card.id)
         const cardStrokes = visual?.cardStrokes ?? []
@@ -545,8 +592,17 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
         const isCompact = preview.size.width < 200 || preview.size.height < 160
         const isMini = preview.size.width < 140 || preview.size.height < 110
         return (
-          <article key={card.id} data-card-id={card.id} className={`idea-card ${selectedCardIds.has(card.id) ? 'idea-card--selected' : ''} ${edgeDraft?.targetCardId === card.id ? 'idea-card--edge-target' : ''} ${isCompact ? 'idea-card--compact' : ''} ${isMini ? 'idea-card--mini' : ''}`} style={{ left: preview.position.x, top: preview.position.y, width: preview.size.width, height: preview.size.height }}>
-            <div className="idea-card__title" onPointerDown={(event) => beginCardDrag(event, card)} onPointerMove={moveCardPreview} onPointerUp={(event) => finishCardDrag(event, false)} onPointerCancel={(event) => finishCardDrag(event, true)} onDoubleClick={() => beginTitleEdit(card)}>
+          <article
+            key={card.id}
+            data-card-id={card.id}
+            className={`idea-card ${tool === 'select' ? 'idea-card--draggable' : ''} ${selectedCardIds.has(card.id) ? 'idea-card--selected' : ''} ${edgeDraft?.targetCardId === card.id ? 'idea-card--edge-target' : ''} ${isCompact ? 'idea-card--compact' : ''} ${isMini ? 'idea-card--mini' : ''}`}
+            style={{ left: preview.position.x, top: preview.position.y, width: preview.size.width, height: preview.size.height }}
+            onPointerDown={(event) => beginCardDrag(event, card)}
+            onPointerMove={moveCardPreview}
+            onPointerUp={(event) => finishCardDrag(event, false)}
+            onPointerCancel={(event) => finishCardDrag(event, true)}
+          >
+            <div className="idea-card__title" onDoubleClick={() => beginTitleEdit(card)}>
               {editingCardId === card.id ? (
                 <>
                   <input
@@ -605,17 +661,8 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
                   defaultValue={card.content}
                   placeholder="输入正文…"
                   onPointerDown={(event) => event.stopPropagation()}
-                  onInput={(event) => {
-                    const value = event.currentTarget.value
-                    setTextLengths((current) => ({ ...current, [card.id]: value.length }))
-                  }}
                   onBlur={(event) => {
                     props.onUpdateTextCard(card.id, { content: event.target.value })
-                    setTextLengths((current) => {
-                      const next = { ...current }
-                      delete next[card.id]
-                      return next
-                    })
                   }}
                 />
               </div>
@@ -655,9 +702,9 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
             ))}
           </article>
         )
-      })}
-      {currentGroup?.status === 'suggested' ? (
-        <>
+        })}
+        {currentGroup?.status === 'suggested' ? (
+          <>
           <div
             className="group-suggestion"
             style={{
@@ -672,8 +719,9 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
             <button type="button" onClick={props.onContinueGroup}>继续添加</button>
             <button type="button" onClick={props.onCancelGroup}>取消分组</button>
           </div>
-        </>
-      ) : null}
+          </>
+        ) : null}
+      </div>
       {calibration.phase === 'roi' ? <div className={`calibration-target calibration-target--${calibration.roiStep}`} aria-hidden="true">{calibration.roiStep + 1}</div> : null}
       <EdgeTypePicker open={showEdgeTypePicker} onSelect={confirmEdgeType} onCancel={cancelEdgeType} />
 

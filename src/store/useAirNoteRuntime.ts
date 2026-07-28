@@ -188,6 +188,7 @@ export function useAirNoteRuntime() {
 
   const applyDocument = useCallback((next: WorkspaceDocument) => {
     documentRef.current = next
+    rendererRef.current.setViewport(next.workspace.viewport)
     rendererRef.current.setCompletedStrokes(next.strokes.filter((stroke) => !stroke.cardId))
     setDocumentState(next)
   }, [])
@@ -542,6 +543,7 @@ export function useAirNoteRuntime() {
     finishRendererStroke()
     rendererRef.current.attach(canvas)
     rendererRef.current.attachCursor(cursor)
+    rendererRef.current.setViewport(documentRef.current.workspace.viewport)
     rendererRef.current.setBrush(settingsRef.current.brush)
     rendererRef.current.setEffectsEnabled(settingsRef.current.experimentalStylesEnabled)
     rendererRef.current.setWritingROI(settingsRef.current.gesture.writingROI)

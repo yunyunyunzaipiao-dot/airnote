@@ -10,7 +10,6 @@ interface Size {
   height: number
 }
 
-const CARD_VISIBLE_MARGIN = 24
 const HANDLE_STAGE_INSET = 14
 
 function clamp(value: number, min: number, max: number) {
@@ -45,8 +44,8 @@ export function resizeCardFromHandle(
 
   return {
     position: {
-      x: clamp(requestedX, CARD_VISIBLE_MARGIN - width, stage.width - CARD_VISIBLE_MARGIN),
-      y: clamp(requestedY, CARD_VISIBLE_MARGIN - height, stage.height - CARD_VISIBLE_MARGIN),
+      x: requestedX,
+      y: requestedY,
     },
     size: { width, height },
   }

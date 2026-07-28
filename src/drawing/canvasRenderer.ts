@@ -46,6 +46,8 @@ export class StrokeCanvasRenderer {
   private context: CanvasRenderingContext2D | null = null
   private width = 0
   private height = 0
+  private pixelRatio = 1
+  private viewport = { x: 0, y: 0, zoom: 1 }
   private completedStrokes: Stroke[] = []
   private brush: BrushSettings = DEFAULT_BRUSH
   private writingROI: WritingROI = DEFAULT_WRITING_ROI
@@ -84,6 +86,7 @@ export class StrokeCanvasRenderer {
     this.context = context
     this.width = width
     this.height = height
+    this.pixelRatio = pixelRatio
     this.resetActiveStroke()
     this.resetGestureFilter()
     this.redraw()
@@ -128,6 +131,16 @@ export class StrokeCanvasRenderer {
     this.resetGestureFilter()
   }
 
+  setViewport(viewport: { x: number; y: number; zoom: number }) {
+    if (![viewport.x, viewport.y, viewport.zoom].every(Number.isFinite)) return
+    this.viewport = {
+      x: viewport.x,
+      y: viewport.y,
+      zoom: Math.min(3, Math.max(0.25, viewport.zoom)),
+    }
+    this.redraw()
+  }
+
   handleGesture(command: GestureCommand): Stroke | null {
     if (command.type === 'END_STROKE') {
       const stroke = this.finishStroke()
@@ -138,8 +151,9 @@ export class StrokeCanvasRenderer {
       return stroke
     }
 
-    const mappedPoint = mapMirroredPoint(command.point, this.width, this.height, this.writingROI)
-    if (!mappedPoint) return null
+    const screenPoint = mapMirroredPoint(command.point, this.width, this.height, this.writingROI)
+    if (!screenPoint) return null
+    const mappedPoint = this.screenToWorld(screenPoint)
     const stabilizedPoint = stabilizeGesturePoint(
       this.gestureFilteredPoint,
       this.gestureRawPoint,
@@ -148,7 +162,10 @@ export class StrokeCanvasRenderer {
     this.gestureFilteredPoint = stabilizedPoint
     this.gestureRawPoint = mappedPoint
 
-    this.updateCursor(stabilizedPoint, command.type === 'START_STROKE' || this.activeSource === 'gesture')
+    this.updateCursor(
+      this.worldToScreen(stabilizedPoint),
+      command.type === 'START_STROKE' || this.activeSource === 'gesture',
+    )
     if (command.type === 'START_STROKE') {
       this.startStroke(stabilizedPoint, command.timestamp, 'gesture')
       return null
@@ -257,6 +274,7 @@ export class StrokeCanvasRenderer {
 
   private redraw() {
     if (!this.context) return
+    this.context.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0)
     this.context.clearRect(0, 0, this.width, this.height)
     this.completedStrokes.forEach((stroke) => this.drawCompletedStroke(stroke))
     if (this.activeStroke && this.activeStroke.points.length >= 2) this.drawCompletedStroke(this.activeStroke)
@@ -299,6 +317,7 @@ export class StrokeCanvasRenderer {
 
   private drawParticleStroke(stroke: Stroke) {
     if (!this.context) return
+    this.applyViewportTransform()
     const density = this.performanceStage === 'full' ? 'full' : 'reduced'
     for (const particle of particleSamplesForStroke(stroke, density)) {
       this.context.beginPath()
@@ -316,6 +335,7 @@ export class StrokeCanvasRenderer {
 
   private configureContext(stroke: Pick<Stroke, 'color' | 'width' | 'style'>) {
     if (!this.context) return
+    this.applyViewportTransform()
     const style = this.effectiveStyle(stroke.style)
     this.context.strokeStyle = stroke.color
     this.context.lineWidth = stroke.width
@@ -350,6 +370,7 @@ export class StrokeCanvasRenderer {
 
   private drawParticles(now: number) {
     if (!this.context || !this.effectsEnabled || this.reducedMotion) return
+    this.applyViewportTransform()
     this.particles = this.particles.filter((particle) => now - particle.createdAt < particle.lifetime)
     for (const particle of this.particles) {
       const progress = Math.max(0, Math.min(1, (now - particle.createdAt) / particle.lifetime))
@@ -434,5 +455,32 @@ export class StrokeCanvasRenderer {
 
   private hideCursor() {
     if (this.cursor) this.cursor.hidden = true
+  }
+
+  private applyViewportTransform() {
+    if (!this.context) return
+    const { x, y, zoom } = this.viewport
+    this.context.setTransform(
+      this.pixelRatio * zoom,
+      0,
+      0,
+      this.pixelRatio * zoom,
+      this.pixelRatio * x,
+      this.pixelRatio * y,
+    )
+  }
+
+  private screenToWorld(point: CanvasPoint): CanvasPoint {
+    return {
+      x: (point.x - this.viewport.x) / this.viewport.zoom,
+      y: (point.y - this.viewport.y) / this.viewport.zoom,
+    }
+  }
+
+  private worldToScreen(point: CanvasPoint): CanvasPoint {
+    return {
+      x: this.viewport.x + point.x * this.viewport.zoom,
+      y: this.viewport.y + point.y * this.viewport.zoom,
+    }
   }
 }

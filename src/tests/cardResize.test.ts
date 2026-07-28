@@ -43,6 +43,16 @@ describe('card resize geometry', () => {
     expect(result.size).toEqual(minimum)
   })
 
+  it('keeps finite positions outside the current viewport instead of pulling the card back', () => {
+    const outside = {
+      position: { x: -900, y: 1200 },
+      size: { width: 300, height: 200 },
+    }
+    const result = resizeCardFromHandle(outside, 'se', { x: 40, y: 30 }, stage, minimum)
+    expect(result.position).toEqual(outside.position)
+    expect(result.size).toEqual({ width: 340, height: 230 })
+  })
+
   it('keeps adaptive corner controls inside the visible stage for an oversized card', () => {
     const oversized = {
       position: { x: -100, y: -50 },
