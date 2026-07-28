@@ -14,6 +14,7 @@ interface CameraPreviewProps {
   onInputModeChange: (mode: InputMode) => void
   onGestureRequest: () => void
   onUseDefaultCalibration: () => void
+  onRecalibrate: () => void
 }
 
 const statusLabels: Record<CameraStatus, string> = {
@@ -37,6 +38,7 @@ export function CameraPreview({
   onInputModeChange,
   onGestureRequest,
   onUseDefaultCalibration,
+  onRecalibrate,
 }: CameraPreviewProps) {
   const isBusy = status === 'requesting' || status === 'loading-model'
   const isRunning = status === 'running'
@@ -114,6 +116,12 @@ export function CameraPreview({
       {isRunning && !canUseGesture ? (
         <button type="button" className="camera-default-btn" onClick={onUseDefaultCalibration}>
           直接使用默认参数
+        </button>
+      ) : null}
+
+      {isRunning && canUseGesture ? (
+        <button type="button" className="camera-recalibrate-btn" onClick={onRecalibrate}>
+          重新校准
         </button>
       ) : null}
 

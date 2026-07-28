@@ -133,6 +133,7 @@ export function WorkspacePage() {
             onInputModeChange={setInputMode}
             onGestureRequest={runtime.requestGestureMode}
             onUseDefaultCalibration={runtime.skipCalibration}
+            onRecalibrate={runtime.beginCalibration}
           />
           <GestureStatus
             diagnostics={runtime.uiState.diagnostics}
@@ -186,6 +187,8 @@ export function WorkspacePage() {
             onSelectionChange={setSelectedCardIds}
           />
         </div>
+
+        <div className="canvas-stage__notice"><p className="eyebrow">P0 WORKSPACE</p><h2 id="canvas-title">{runtime.tool === 'draw' ? (runtime.settings.inputMode === 'mouse' ? '鼠标画笔已启用' : '捏合落笔，松开断笔') : runtime.tool === 'erase' ? '整笔橡皮擦：点击或划过自由笔迹' : runtime.tool === 'pan' ? '拖动画布进行平移' : runtime.tool === 'select' ? (selectedCardIds.length > 1 ? `已选择 ${selectedCardIds.length} 张卡片，可整体移动` : '选择卡片或从锚点连线') : runtime.tool === 'lasso-rect' ? '拖动矩形框选笔画与卡片' : '拖动自由套索选择笔画与卡片'}</h2><p>按住 Shift 可增减卡片选择；实验视觉不改写原始 Stroke。</p></div>
 
         {runtime.uiState.cameraStatus === 'running' && runtime.calibration.phase !== 'ready' && (
           <div className="calibration-overlay" role="dialog" aria-modal="true" aria-label="手势校准">
