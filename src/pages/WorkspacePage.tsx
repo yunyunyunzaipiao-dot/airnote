@@ -5,6 +5,7 @@ import { CameraPreview } from '../components/CameraPreview'
 import { CardPropertyPanel } from '../components/CardPropertyPanel'
 import { GestureStatus } from '../components/GestureStatus'
 import { LeftToolbar } from '../components/LeftToolbar'
+import { hasCompletedOnboarding, OnboardingFlow } from '../components/OnboardingFlow'
 import { StatusCenter, useStatusCenter } from '../components/StatusCenter'
 import { TopBar } from '../components/TopBar'
 import { WorkspaceCanvas } from '../components/WorkspaceCanvas'
@@ -18,6 +19,7 @@ export function WorkspacePage() {
   const pointerEventsSupported = typeof window.PointerEvent !== 'undefined'
   const viewport = runtime.document.workspace.viewport
   const [showCameraConsent, setShowCameraConsent] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(() => !hasCompletedOnboarding())
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([])
   const statusCenter = useStatusCenter()
 
@@ -30,6 +32,53 @@ export function WorkspacePage() {
   useEffect(() => {
     if (runtime.uiState.errorMessage) statusCenter.push(runtime.uiState.errorMessage, 'error')
   }, [runtime.uiState.errorMessage, statusCenter.push])
+
+  useEffect(() => {
+    const handleToolShortcut = (event: KeyboardEvent) => {
+      const target = event.target
+      const isEditing = target instanceof HTMLElement
+        && Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
+      const calibrationOpen = runtime.uiState.cameraStatus === 'running'
+        && runtime.calibration.phase !== 'ready'
+      if (
+        event.ctrlKey
+        || event.metaKey
+        || event.altKey
+        || isEditing
+        || showOnboarding
+        || showCameraConsent
+        || calibrationOpen
+      ) return
+
+      const key = event.key.toLowerCase()
+      const toolByKey = {
+        v: 'select',
+        p: 'draw',
+        e: 'erase',
+        h: 'pan',
+        r: 'lasso-rect',
+        l: 'lasso-free',
+      } as const
+      const nextTool = toolByKey[key as keyof typeof toolByKey]
+      if (nextTool) {
+        event.preventDefault()
+        runtime.setTool(nextTool)
+      } else if (key === 't') {
+        event.preventDefault()
+        runtime.addTextCard()
+      }
+    }
+
+    window.addEventListener('keydown', handleToolShortcut)
+    return () => window.removeEventListener('keydown', handleToolShortcut)
+  }, [
+    runtime.addTextCard,
+    runtime.calibration.phase,
+    runtime.setTool,
+    runtime.uiState.cameraStatus,
+    showCameraConsent,
+    showOnboarding,
+  ])
 
   const confirmClear = () => {
     const confirmed = window.confirm('将清空当前画布中的笔迹、卡片和连接线。此操作可撤销一次。')
@@ -102,6 +151,7 @@ export function WorkspacePage() {
         onExportJpg={exportJpg}
         onExportProject={exportProject}
         onImportProject={importProject}
+        onOpenOnboarding={() => setShowOnboarding(true)}
       />
       <div className="workspace-layout">
         <div className="floating-sidebar" aria-label="工具与摄像头面板">
@@ -223,6 +273,7 @@ export function WorkspacePage() {
           }}
         />
       ) : null}
+      {showOnboarding ? <OnboardingFlow onClose={() => setShowOnboarding(false)} /> : null}
     </main>
   )
 }

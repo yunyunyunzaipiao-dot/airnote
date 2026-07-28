@@ -17,7 +17,7 @@ export function useFocusTrap(enabled: boolean) {
 
     const focusables = Array.from(
       container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
-    ).filter((el) => !el.disabled && el.offsetParent !== null)
+    ).filter((element) => !element.matches(':disabled') && !element.hidden)
 
     if (focusables.length > 0) {
       focusables[0].focus()

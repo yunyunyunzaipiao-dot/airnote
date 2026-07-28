@@ -20,6 +20,7 @@ interface TopBarProps {
   onExportJpg: () => void
   onExportProject: () => void
   onImportProject: (file: File) => void
+  onOpenOnboarding: () => void
 }
 
 export function TopBar({
@@ -37,6 +38,7 @@ export function TopBar({
   onExportJpg,
   onExportProject,
   onImportProject,
+  onOpenOnboarding,
 }: TopBarProps) {
   const cameraActive = cameraStatus === 'running'
   const importInputRef = useRef<HTMLInputElement>(null)
@@ -106,6 +108,10 @@ export function TopBar({
 
         <button type="button" className="top-bar__icon-action" aria-label={theme === 'night' ? '切换日间模式' : '切换夜间模式'} title={theme === 'night' ? '切换日间模式' : '切换夜间模式'} onClick={toggleDayNight}>
           {theme === 'night' ? '☀' : '☾'}
+        </button>
+
+        <button type="button" className="top-bar__icon-action top-bar__help-action" aria-label="打开新手引导" title="新手入门" onClick={onOpenOnboarding}>
+          ?
         </button>
 
         <div className="export-menu">

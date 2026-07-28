@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
+import { ToolIcon, type IconName } from './LeftToolbar'
 
 export const ONBOARDING_STORAGE_KEY = 'airnote-onboarding-done'
 
@@ -23,40 +24,108 @@ const STEPS = [
   {
     eyebrow: 'AIRNOTE',
     title: '欢迎使用空书',
-    body: '一块安静的画布，捕捉你的灵感。墨迹、文字与连线，都从这里自然展开。',
-    visual: <div className="onboarding-ink" aria-hidden="true"><span /><span /></div>,
+    body: ['一块安静的画布，捕捉你的灵感。', '墨迹、文字、连线 — 随心而至。'],
+    visual: (
+      <div className="onboarding-welcome" aria-hidden="true">
+        <span className="onboarding-brand">AN</span>
+        <div className="onboarding-ink"><span /><span /></div>
+      </div>
+    ),
   },
   {
-    eyebrow: '画布操作',
-    title: '在同一片画布上自由整理',
-    body: '使用画笔记录，切换平移工具浏览内容；右下角可在 25%—300% 之间缩放。',
-    visual: <div className="onboarding-canvas-demo" aria-hidden="true"><span className="demo-card demo-card--one" /><span className="demo-card demo-card--two" /><i /></div>,
+    eyebrow: '平移 · 缩放',
+    title: '自由探索画布',
+    body: ['按 H 切换平移工具，拖动画布浏览内容。', '右下角可在 25%—300% 之间缩放。'],
+    visual: (
+      <div className="onboarding-canvas-demo" aria-hidden="true">
+        <span className="demo-card">笔记卡片</span>
+        <span className="demo-pan-arrows">↔</span>
+        <span className="demo-zoom">100%</span>
+      </div>
+    ),
   },
   {
-    eyebrow: '工具栏',
-    title: '选择最合适的操作',
-    body: '选择、画笔、整笔橡皮擦、平移、矩形框选、自由套索和文字卡片都有鼠标入口。',
-    visual: <div className="onboarding-tools" aria-hidden="true">{['V', 'P', 'E', 'H', 'R', 'L', 'T'].map((key) => <span key={key}>{key}</span>)}</div>,
+    eyebrow: '7 种工具，键盘快捷键驱动',
+    title: '工具栏一览',
+    body: ['左侧工具栏包含核心工具，每个工具都有单键快捷键。', '按 P 激活画笔，按 V 回到选择模式。'],
+    visual: <ToolbarPreview />,
   },
   {
-    eyebrow: '两种卡片',
-    title: '让墨迹和文字成为想法单元',
-    body: '自由笔迹由你确认后生成墨迹卡片；文字卡片可编辑标题、正文、格式和颜色。',
-    visual: <div className="onboarding-card-demo" aria-hidden="true"><span><i /><i /><i /></span><span><strong>文字卡片</strong><small>补充一句说明</small></span></div>,
+    eyebrow: '墨迹卡片 · 文字卡片',
+    title: '两种卡片',
+    body: ['用矩形或套索选中笔迹，点击「生成墨迹卡片」封装笔迹。', '按 T 快速新建文字卡片，双击卡片内容即可编辑。'],
+    visual: (
+      <div className="onboarding-card-demo" aria-hidden="true">
+        <span className="demo-ink-card"><strong>墨迹卡片</strong><i /><i /></span>
+        <span className="demo-text-card"><strong>文字卡片</strong><i /><i /><i /></span>
+      </div>
+    ),
   },
   {
-    eyebrow: '连接想法',
-    title: '从卡片锚点建立关系',
-    body: '在选择工具下，从卡片四周的连接点拖向另一张卡片；移动卡片时连接会实时跟随。',
-    visual: <div className="onboarding-edge-demo" aria-hidden="true"><span /><i /><span /></div>,
+    eyebrow: '无方向 · 单向 · 双向',
+    title: '连接卡片',
+    body: ['在选择模式下，悬停卡片边缘出现锚点。', '从锚点拖向另一张卡片完成连线，可选择箭头方向。'],
+    visual: (
+      <div className="onboarding-edge-demo" aria-hidden="true">
+        <span>卡片 A</span><i /><b>›</b><span>卡片 B</span>
+      </div>
+    ),
   },
   {
-    eyebrow: '快捷键',
-    title: '现在可以开始了',
-    body: 'V 选择、P 画笔、E 橡皮擦、H 平移、R 矩形框选、L 套索、Ctrl/Cmd+Z 撤销。',
-    visual: <div className="onboarding-shortcuts" aria-hidden="true">{['V', 'P', 'E', 'H', 'R', 'L', '⌘ Z'].map((key) => <kbd key={key}>{key}</kbd>)}</div>,
+    eyebrow: '空书已就绪',
+    title: '开始创作',
+    body: ['所有操作支持撤销/重做（⌘Z / ⌘⇧Z）。', '随时点击顶栏的 ? 重新查看引导。'],
+    visual: <ShortcutPreview />,
   },
 ] as const
+
+const TOOL_PREVIEW: Array<{ name: IconName; key: string }> = [
+  { name: 'pointer', key: 'V' },
+  { name: 'pen', key: 'P' },
+  { name: 'eraser', key: 'E' },
+  { name: 'pan', key: 'H' },
+  { name: 'rect', key: 'R' },
+  { name: 'lasso', key: 'L' },
+  { name: 'text', key: 'T' },
+]
+
+function ToolbarPreview() {
+  return (
+    <div className="onboarding-tools-preview" aria-hidden="true">
+      <div className="onboarding-tools">
+        {TOOL_PREVIEW.map((tool, index) => (
+          <span key={tool.key} className={index === 0 ? 'is-active' : undefined}><ToolIcon name={tool.name} /></span>
+        ))}
+      </div>
+      <div className="onboarding-tool-note">
+        <span><ToolIcon name="pointer" /></span>
+        <strong>选择</strong>
+        <kbd>V</kbd>
+        <small>快捷键</small>
+      </div>
+    </div>
+  )
+}
+
+function ShortcutPreview() {
+  const shortcuts: Array<[ReactNode, string]> = [
+    [<>⌘Z</>, '撤销'],
+    [<>⌘⇧Z</>, '重做'],
+    [<>Del</>, '删除'],
+    [<>Esc</>, '取消'],
+    [<>⌘±</>, '缩放'],
+    [<>V/P/E</>, '切换工具'],
+  ]
+
+  return (
+    <div className="onboarding-shortcuts" aria-hidden="true">
+      <span className="onboarding-ready-mark">✧</span>
+      <div>
+        {shortcuts.map(([key, label]) => <span key={label}><kbd>{key}</kbd><small>{label}</small></span>)}
+      </div>
+    </div>
+  )
+}
 
 interface OnboardingFlowProps {
   onClose: () => void
@@ -67,35 +136,45 @@ export function OnboardingFlow({ onClose }: OnboardingFlowProps) {
   const current = STEPS[step]
   const dialogRef = useFocusTrap(true)
 
-  const finish = () => {
+  const finish = useCallback(() => {
     saveOnboardingCompleted()
     onClose()
-  }
+  }, [onClose])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') finish()
-      if (event.key === 'ArrowRight' && step < STEPS.length - 1) setStep((value) => value + 1)
-      if (event.key === 'ArrowLeft' && step > 0) setStep((value) => value - 1)
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        finish()
+      }
+      if (event.key === 'ArrowRight' && step < STEPS.length - 1) {
+        event.preventDefault()
+        setStep((value) => value + 1)
+      }
+      if (event.key === 'ArrowLeft' && step > 0) {
+        event.preventDefault()
+        setStep((value) => value - 1)
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [step])
+  }, [finish, step])
 
   return (
     <div className="onboarding-layer" role="presentation">
       <button className="onboarding-backdrop" type="button" aria-label="跳过新手引导" onClick={finish} />
       <section ref={dialogRef} className="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
-        <button className="onboarding-close" type="button" aria-label="跳过并关闭新手引导" onClick={finish}>×</button>
+        <button className="onboarding-close" type="button" aria-label="跳过并关闭新手引导" onClick={finish}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
         <div className="onboarding-visual">
           <span className="onboarding-count">{step + 1} / {STEPS.length}</span>
-          <span className="onboarding-brand" aria-hidden="true">空</span>
           {current.visual}
         </div>
-        <div className="onboarding-copy">
+        <div className="onboarding-copy" aria-live="polite">
           <p className="onboarding-eyebrow">{current.eyebrow}</p>
           <h2 id="onboarding-title">{current.title}</h2>
-          <p>{current.body}</p>
+          <p>{current.body.map((line) => <span key={line}>{line}</span>)}</p>
         </div>
         <footer className="onboarding-footer">
           <div className="onboarding-dots" aria-label="新手引导步骤">
@@ -111,10 +190,10 @@ export function OnboardingFlow({ onClose }: OnboardingFlowProps) {
             ))}
           </div>
           <div className="onboarding-actions">
-            {step > 0 ? <button type="button" onClick={() => setStep((value) => value - 1)}>上一步</button> : <button type="button" onClick={finish}>跳过</button>}
+            {step > 0 ? <button type="button" onClick={() => setStep((value) => value - 1)}>上一步</button> : null}
             {step < STEPS.length - 1
               ? <button className="onboarding-primary" type="button" onClick={() => setStep((value) => value + 1)}>下一步 →</button>
-              : <button className="onboarding-primary" type="button" onClick={finish}>开始使用</button>}
+              : <button className="onboarding-primary" type="button" onClick={finish}>开始创作</button>}
           </div>
         </footer>
       </section>

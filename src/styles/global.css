@@ -1621,14 +1621,13 @@ select:focus-visible {
 
 .onboarding-dialog {
   position: relative;
-  width: min(480px, calc(100vw - 40px));
+  width: min(600px, calc(100vw - 40px));
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 24px;
   color: var(--ink);
-  background: color-mix(in srgb, var(--ui-panel-solid) 97%, transparent);
-  box-shadow: 0 32px 80px rgba(20, 24, 32, 0.28);
-  backdrop-filter: blur(24px);
+  background: var(--ui-panel-solid);
+  box-shadow: 0 34px 80px rgba(20, 24, 32, 0.30), 0 8px 24px rgba(20, 24, 32, 0.12);
 }
 
 .onboarding-close {
@@ -1646,7 +1645,6 @@ select:focus-visible {
   color: var(--muted);
   background: transparent;
   cursor: pointer;
-  font-size: 20px;
 }
 
 .onboarding-close:hover {
@@ -1654,60 +1652,81 @@ select:focus-visible {
   background: var(--ui-button);
 }
 
+.onboarding-close svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.7;
+}
+
 .onboarding-visual {
   position: relative;
   display: grid;
   place-items: center;
-  height: 220px;
+  height: 248px;
   overflow: hidden;
   border-bottom: 1px solid var(--line);
   background:
-    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--ink) 10%, transparent) 1px, transparent 1px) 0 0 / 22px 22px,
-    linear-gradient(180deg, color-mix(in srgb, var(--ui-canvas) 88%, transparent), var(--ui-panel-solid));
+    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--ink) 7%, transparent) 1px, transparent 1px) 0 0 / 22px 22px,
+    var(--ui-canvas);
 }
 
 .onboarding-count {
   position: absolute;
-  top: 16px;
+  top: 17px;
   left: 18px;
+  z-index: 2;
+  padding: 5px 10px;
+  border-radius: 999px;
   color: var(--muted);
-  font-size: 10px;
+  background: color-mix(in srgb, var(--ui-button) 84%, transparent);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .onboarding-brand {
-  position: absolute;
-  top: 28px;
   display: grid;
   place-items: center;
-  width: 58px;
-  height: 58px;
-  border-radius: 18px;
+  width: 74px;
+  height: 74px;
+  border-radius: 24px;
   color: var(--paper);
   background: var(--ink);
-  box-shadow: 0 10px 24px var(--ui-shadow);
-  font-size: 22px;
-  font-weight: 700;
+  box-shadow: 0 12px 24px rgba(20, 24, 32, 0.18);
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+}
+
+.onboarding-welcome {
+  display: grid;
+  justify-items: center;
+  gap: 28px;
+  padding-top: 30px;
 }
 
 .onboarding-copy {
-  min-height: 138px;
-  padding: 24px 30px 14px;
+  min-height: 151px;
+  padding: 30px 38px 14px;
 }
 
 .onboarding-eyebrow,
 .consent-eyebrow {
   margin: 0 0 5px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.06em;
 }
 
 .onboarding-copy h2,
 .consent-dialog h2 {
   margin: 0;
   color: var(--ink);
-  font-size: 21px;
+  font-size: 24px;
+  font-weight: 650;
   letter-spacing: -0.03em;
 }
 
@@ -1715,8 +1734,12 @@ select:focus-visible {
 .consent-dialog > p {
   margin: 10px 0 0;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.7;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.onboarding-copy > p:last-child span {
+  display: block;
 }
 
 .onboarding-footer {
@@ -1724,7 +1747,8 @@ select:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 14px 22px 20px 30px;
+  min-height: 72px;
+  padding: 10px 38px 24px;
 }
 
 .onboarding-dots,
@@ -1735,33 +1759,33 @@ select:focus-visible {
 }
 
 .onboarding-dot {
-  width: 17px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   padding: 0;
   border: 0;
   border-radius: 999px;
   background: color-mix(in srgb, var(--ink) 20%, transparent);
   cursor: pointer;
-  transform: scaleX(0.35);
-  transform-origin: left center;
-  transition: transform 160ms ease, background 160ms ease;
+  transform: scaleX(1);
+  transform-origin: center;
+  transition: transform 160ms cubic-bezier(.2,.8,.2,1), background 160ms ease;
 }
 
 .onboarding-dot--active {
-  transform: scaleX(1);
   background: var(--ink);
+  transform: scaleX(2.6);
 }
 
 .onboarding-actions button,
 .consent-actions button {
-  min-height: 34px;
-  padding: 7px 13px;
+  min-height: 38px;
+  padding: 8px 14px;
   border: 0;
   border-radius: 10px;
   color: var(--muted);
   background: transparent;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 650;
 }
 
@@ -1769,7 +1793,7 @@ select:focus-visible {
 .consent-actions .consent-primary {
   color: var(--paper);
   background: var(--ink);
-  box-shadow: 0 5px 14px rgba(20, 24, 32, 0.18);
+  box-shadow: 0 7px 16px rgba(20, 24, 32, 0.20);
 }
 
 [data-ui-theme="night"] .onboarding-actions .onboarding-primary,
@@ -1780,125 +1804,336 @@ select:focus-visible {
 
 .onboarding-ink {
   position: relative;
-  width: 170px;
-  height: 66px;
-  margin-top: 86px;
+  width: 210px;
+  height: 34px;
 }
 
 .onboarding-ink span {
   position: absolute;
-  left: 8px;
-  width: 150px;
-  height: 36px;
+  left: 4px;
+  width: 198px;
+  height: 30px;
   border-top: 2px solid var(--ink);
   border-radius: 50%;
-  transform: rotate(-5deg);
+  opacity: 0.58;
+  transform: rotate(-4deg);
 }
 
 .onboarding-ink span:last-child {
-  top: 14px;
-  left: 20px;
-  opacity: 0.45;
-  transform: rotate(3deg);
+  top: 12px;
+  left: 16px;
+  width: 180px;
+  border-top-width: 2px;
+  opacity: 0.32;
+  transform: rotate(2deg);
 }
 
 .onboarding-canvas-demo,
 .onboarding-card-demo,
 .onboarding-edge-demo,
-.onboarding-tools,
+.onboarding-tools-preview,
 .onboarding-shortcuts {
-  margin-top: 82px;
+  margin-top: 18px;
 }
 
 .onboarding-canvas-demo {
   position: relative;
-  width: 250px;
-  height: 90px;
+  width: 244px;
+  height: 166px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  background:
+    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--ink) 9%, transparent) 1px, transparent 1px) 0 0 / 18px 18px,
+    var(--ui-panel-solid);
+  box-shadow: 0 8px 18px var(--ui-shadow);
 }
 
 .demo-card {
   position: absolute;
-  width: 92px;
-  height: 56px;
+  top: 26px;
+  left: 22px;
+  display: grid;
+  place-items: center;
+  width: 94px;
+  height: 64px;
   border: 1px solid var(--line);
   border-radius: 12px;
+  color: var(--muted);
   background: var(--ui-panel-solid);
-  box-shadow: 0 8px 20px var(--ui-shadow);
+  box-shadow: 0 7px 14px var(--ui-shadow);
+  font-size: 11px;
 }
 
-.demo-card--one { top: 8px; left: 12px; }
-.demo-card--two { right: 12px; bottom: 5px; }
-.onboarding-canvas-demo i {
+.demo-pan-arrows {
   position: absolute;
-  top: 40px;
+  top: 78px;
   left: 100px;
-  width: 54px;
-  border-top: 2px dashed var(--blue);
+  color: color-mix(in srgb, var(--muted) 48%, transparent);
+  font-size: 34px;
+  line-height: 1;
+}
+
+.demo-zoom {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--ui-panel-solid);
+  box-shadow: 0 4px 10px var(--ui-shadow);
+  font-size: 11px;
+}
+
+.onboarding-tools-preview {
+  display: flex;
+  align-items: center;
+  gap: 32px;
 }
 
 .onboarding-tools {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--ui-panel-solid);
+  box-shadow: 0 8px 18px var(--ui-shadow);
+}
+
+.onboarding-tools span {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 28px;
+  border-radius: 9px;
+  color: var(--muted);
+}
+
+.onboarding-tools span.is-active {
+  color: var(--blue);
+  background: var(--primary-soft);
+}
+
+.onboarding-tools svg,
+.onboarding-tool-note svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.onboarding-tool-note {
+  display: grid;
+  grid-template-columns: 24px auto;
+  align-items: center;
+  gap: 7px 9px;
+  min-width: 128px;
+  color: var(--ink);
+}
+
+.onboarding-tool-note > span {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: var(--blue);
+  background: var(--primary-soft);
+}
+
+.onboarding-tool-note strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.onboarding-tool-note kbd,
+.onboarding-shortcuts kbd {
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  min-height: 25px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--muted);
+  background: var(--ui-button);
+  box-shadow: inset 0 -1px 0 var(--line);
+  font-family: inherit;
+  font-size: 10px;
+}
+
+.onboarding-tool-note small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.onboarding-card-demo {
   display: flex;
   gap: 6px;
 }
 
-.onboarding-tools span,
-.onboarding-shortcuts kbd {
+.onboarding-card-demo > span {
   display: grid;
-  place-items: center;
-  min-width: 32px;
-  height: 32px;
-  padding: 0 8px;
+  align-content: start;
+  width: 122px;
+  height: 100px;
+  overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 15px;
   color: var(--ink);
   background: var(--ui-panel-solid);
-  box-shadow: 0 4px 10px var(--ui-shadow);
-  font-size: 10px;
+  box-shadow: 0 7px 16px var(--ui-shadow);
 }
 
-.onboarding-card-demo,
-.onboarding-edge-demo {
-  display: flex;
-  align-items: center;
-  gap: 22px;
+.onboarding-card-demo strong {
+  padding: 12px 13px 9px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 600;
 }
 
-.onboarding-card-demo > span,
-.onboarding-edge-demo > span {
-  display: grid;
-  width: 120px;
-  min-height: 68px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  background: var(--ui-panel-solid);
-  box-shadow: 0 8px 20px var(--ui-shadow);
+.onboarding-card-demo .demo-text-card strong {
+  color: var(--blue);
 }
 
 .onboarding-card-demo i {
-  width: 70%;
-  margin: 3px auto;
-  border-top: 2px solid var(--ink);
-  border-radius: 50%;
+  width: 76%;
+  height: 7px;
+  margin: 6px 13px 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 24%, transparent);
 }
 
-.onboarding-card-demo small {
-  margin-top: 8px;
+.onboarding-card-demo .demo-ink-card i {
+  width: 74%;
+  height: 20px;
+  margin-top: 12px;
+  border-top: 2px solid var(--ink);
+  background: transparent;
+  border-radius: 50%;
+  transform: rotate(-8deg);
+}
+
+.onboarding-card-demo .demo-ink-card i:last-child {
+  width: 64%;
+  margin-top: -11px;
+  opacity: 0.42;
+  transform: rotate(7deg);
+}
+
+.onboarding-card-demo i:nth-child(3) {
+  width: 58%;
+}
+
+.onboarding-edge-demo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.onboarding-edge-demo > span {
+  display: grid;
+  place-items: center;
+  width: 92px;
+  height: 64px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
   color: var(--muted);
-  font-size: 10px;
+  background: var(--ui-panel-solid);
+  font-size: 12px;
 }
 
 .onboarding-edge-demo i {
-  width: 54px;
+  width: 84px;
   border-top: 2px dashed var(--blue);
 }
 
+.onboarding-edge-demo b {
+  position: absolute;
+  left: calc(50% + 28px);
+  color: var(--blue);
+  font-size: 22px;
+  font-weight: 500;
+}
+
 .onboarding-shortcuts {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 7px;
-  max-width: 270px;
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+}
+
+.onboarding-ready-mark {
+  display: grid;
+  place-items: center;
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  font-size: 36px;
+}
+
+.onboarding-shortcuts > div {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 6px 28px;
+}
+
+.onboarding-shortcuts > div > span {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  align-items: center;
+  gap: 8px;
+  min-width: 118px;
+}
+
+.onboarding-shortcuts small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.top-bar__help-action {
+  font-weight: 750;
+}
+
+@media (max-width: 640px) {
+  .onboarding-dialog {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+    border-radius: 20px;
+  }
+
+  .onboarding-visual {
+    height: 210px;
+  }
+
+  .onboarding-copy {
+    min-height: 0;
+    padding: 24px 24px 12px;
+  }
+
+  .onboarding-copy h2 {
+    font-size: 21px;
+  }
+
+  .onboarding-footer {
+    padding: 10px 24px 20px;
+  }
+
+  .onboarding-tools-preview {
+    gap: 18px;
+  }
+
+  .onboarding-card-demo > span {
+    width: 112px;
+  }
 }
 
 .consent-dialog {

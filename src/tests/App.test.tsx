@@ -131,16 +131,38 @@ describe('AirNote M1 workspace', () => {
     expect(screen.getByText('1 / 6')).toBeInTheDocument()
     expect(getUserMedia).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: '前往第 6 步：现在可以开始了' }))
+    fireEvent.click(screen.getByRole('button', { name: '前往第 6 步：开始创作' }))
     expect(screen.getByText('6 / 6')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '开始使用' }))
+    fireEvent.click(screen.getByRole('button', { name: '开始创作' }))
     expect(localStorage.getItem('airnote-onboarding-done')).toBe('1')
-    expect(screen.queryByRole('dialog', { name: '现在可以开始了' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '开始创作' })).not.toBeInTheDocument()
 
     firstRender.unmount()
     renderApp()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(getUserMedia).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '打开新手引导' }))
+    expect(screen.getByRole('dialog', { name: '欢迎使用空书' })).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    expect(screen.getByRole('dialog', { name: '自由探索画布' })).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('uses single-key tool shortcuts outside editing fields', () => {
+    renderApp()
+
+    fireEvent.keyDown(window, { key: 'h' })
+    expect(screen.getByRole('button', { name: '平移画布' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.keyDown(window, { key: 'v' })
+    expect(screen.getByRole('button', { name: '选择卡片' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.keyDown(window, { key: 't' })
+    expect(screen.getByRole('textbox', { name: '编辑文字卡片 未命名文字' })).toBeInTheDocument()
+
+    const body = screen.getByRole('textbox', { name: '编辑文字卡片 未命名文字' })
+    fireEvent.keyDown(body, { key: 'p' })
+    expect(screen.getByRole('button', { name: '选择卡片' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('creates a basic text card and applies whole-card formatting', () => {

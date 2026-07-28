@@ -19,9 +19,9 @@ interface LeftToolbarProps {
   onCreateTextCard: () => void
 }
 
-type IconName = 'pointer' | 'lasso' | 'rect' | 'free' | 'pen' | 'eraser' | 'pan' | 'text' | 'hand' | 'palm' | 'star'
+export type IconName = 'pointer' | 'lasso' | 'rect' | 'free' | 'pen' | 'eraser' | 'pan' | 'text' | 'hand' | 'palm' | 'star'
 
-function ToolIcon({ name }: { name: IconName }) {
+export function ToolIcon({ name }: { name: IconName }) {
   if (name === 'pointer') {
     return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l13 9-6 1.5 3.5 6-2.5 1.5-3.5-6L5 19V3z" /></svg>
   }
