@@ -3,7 +3,6 @@ import type { IdeaCard, TextCardStyle } from '../types/workspace'
 
 interface CardPropertyPanelProps {
   card: IdeaCard | null
-  onRenameCard?: (cardId: string, title: string) => void
   onUpdateTextCard?: (cardId: string, patch: { textStyle?: Partial<TextCardStyle> }) => void
   onDeleteCard?: (cardId: string) => void
   onClose?: () => void
@@ -16,7 +15,6 @@ const TEXT_COLORS = [
 
 export function CardPropertyPanel({
   card,
-  onRenameCard,
   onUpdateTextCard,
   onDeleteCard,
   onClose,

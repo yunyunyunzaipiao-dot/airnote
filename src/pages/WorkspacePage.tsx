@@ -248,7 +248,6 @@ export function WorkspacePage() {
         <div className="floating-right" aria-label="属性面板">
           <CardPropertyPanel
             card={selectedCardIds.length === 1 ? runtime.document.cards.find((c) => c.id === selectedCardIds[0]) ?? null : null}
-            onRenameCard={runtime.commitCardRename}
             onUpdateTextCard={runtime.commitTextCardUpdate}
             onDeleteCard={runtime.commitCardDelete}
             onClose={() => setSelectedCardIds([])}
