@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState, type ChangeEvent } from 'react'
 import type { CameraStatus } from '../types/m0'
 import type { InputMode } from '../types/workspace'
 import type { SaveStatus } from '../persistence/workspaceStorage'
+import { getShortcutLabels } from '../keyboard/shortcuts'
 import { applyUiTheme, loadUiTheme, saveUiTheme, type UiThemeId } from '../theme/uiThemes'
 import { ThemeMenu } from './ThemeMenu'
 
@@ -40,6 +41,7 @@ export function TopBar({
   onImportProject,
   onOpenOnboarding,
 }: TopBarProps) {
+  const shortcutLabels = getShortcutLabels()
   const cameraActive = cameraStatus === 'running'
   const importInputRef = useRef<HTMLInputElement>(null)
   const [exportOpen, setExportOpen] = useState(false)
@@ -89,10 +91,10 @@ export function TopBar({
 
       <nav className="top-bar__actions" aria-label="项目操作">
         <div className="top-bar__pill">
-          <button type="button" className="history-action" aria-label="撤销" onClick={onUndo} disabled={!canUndo} title="撤销：Ctrl/Cmd+Z">
+          <button type="button" className="history-action" aria-label="撤销" onClick={onUndo} disabled={!canUndo} title={`撤销：${shortcutLabels.undo}`}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7v6h6" /><path d="M21 17a9 9 0 0 0-15-6.7L3 13" /></svg>
           </button>
-          <button type="button" className="history-action" aria-label="重做" onClick={onRedo} disabled={!canRedo} title="重做：Ctrl/Cmd+Shift+Z">
+          <button type="button" className="history-action" aria-label="重做" onClick={onRedo} disabled={!canRedo} title={`重做：${shortcutLabels.redo}`}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7v6h-6" /><path d="M3 17a9 9 0 0 1 15-6.7L21 13" /></svg>
           </button>
           <span className="top-bar__divider" aria-hidden="true" />

@@ -8,6 +8,7 @@ import {
   createTextCard,
   createWorkspaceDocument,
   deleteCard,
+  restoreInkCard,
   eraseStroke,
   moveCard,
   moveCards,
@@ -113,6 +114,24 @@ describe('M2 workspace document', () => {
     expect(deleted.edges).toEqual([])
     expect(deleted.strokes.find((item) => item.id === 's1')).toBeUndefined()
     expect(deleted.strokes.find((item) => item.id === 's2')?.points).toHaveLength(2)
+  })
+
+  it('restores an ink card to free Strokes without changing point geometry', () => {
+    let document = createCardFromCurrentGroup(addStrokeToCurrentGroup(createWorkspaceDocument(0), stroke('s1')))!
+    document = addStrokeToCurrentGroup(document, stroke('s2', 100))
+    document = createCardFromCurrentGroup(document)!
+    const [first, second] = document.cards
+    const linked = createEdge(document, first.id, second.id, 'undirected')!
+    const originalPoints = structuredClone(linked.strokes.find((item) => item.id === 's1')!.points)
+
+    const restored = restoreInkCard(linked, first.id)
+
+    expect(restored.cards.map((card) => card.id)).toEqual([second.id])
+    expect(restored.edges).toEqual([])
+    expect(restored.strokes.find((item) => item.id === 's1')).not.toHaveProperty('cardId')
+    expect(restored.strokes.find((item) => item.id === 's1')?.points).toEqual(originalPoints)
+    expect(restored.strokes.find((item) => item.id === 's2')?.cardId).toBe(second.id)
+    expect(restored.groups.some((group) => group.strokeIds.includes('s1'))).toBe(false)
   })
 
   it('erases only a complete free Stroke and preserves carded Stroke geometry', () => {

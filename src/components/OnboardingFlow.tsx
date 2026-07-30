@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap'
+import { getShortcutLabels } from '../keyboard/shortcuts'
 import { ToolIcon, type IconName } from './LeftToolbar'
 
 export const ONBOARDING_STORAGE_KEY = 'airnote-onboarding-done'
@@ -20,7 +21,9 @@ export function saveOnboardingCompleted(storage: Pick<Storage, 'setItem'> = loca
   }
 }
 
-const STEPS = [
+function onboardingSteps() {
+  const shortcutLabels = getShortcutLabels()
+  return [
   {
     eyebrow: 'AIRNOTE',
     title: '欢迎使用空书',
@@ -74,10 +77,11 @@ const STEPS = [
   {
     eyebrow: '空书已就绪',
     title: '开始创作',
-    body: ['所有操作支持撤销/重做（⌘Z / ⌘⇧Z）。', '随时点击顶栏的 ? 重新查看引导。'],
+    body: [`所有操作支持撤销/重做（${shortcutLabels.undo} / ${shortcutLabels.redo}）。`, '随时点击顶栏的 ? 重新查看引导。'],
     visual: <ShortcutPreview />,
   },
-] as const
+  ] as const
+}
 
 const TOOL_PREVIEW: Array<{ name: IconName; key: string }> = [
   { name: 'pointer', key: 'V' },
@@ -108,12 +112,13 @@ function ToolbarPreview() {
 }
 
 function ShortcutPreview() {
+  const labels = getShortcutLabels()
   const shortcuts: Array<[ReactNode, string]> = [
-    [<>⌘Z</>, '撤销'],
-    [<>⌘⇧Z</>, '重做'],
+    [<>{labels.undo}</>, '撤销'],
+    [<>{labels.redo}</>, '重做'],
     [<>Del</>, '删除'],
     [<>Esc</>, '取消'],
-    [<>⌘±</>, '缩放'],
+    [<>{labels.zoom}</>, '缩放'],
     [<>V/P/E</>, '切换工具'],
   ]
 
@@ -133,7 +138,8 @@ interface OnboardingFlowProps {
 
 export function OnboardingFlow({ onClose }: OnboardingFlowProps) {
   const [step, setStep] = useState(0)
-  const current = STEPS[step]
+  const steps = onboardingSteps()
+  const current = steps[step]
   const dialogRef = useFocusTrap(true)
 
   const finish = useCallback(() => {
@@ -147,7 +153,7 @@ export function OnboardingFlow({ onClose }: OnboardingFlowProps) {
         event.preventDefault()
         finish()
       }
-      if (event.key === 'ArrowRight' && step < STEPS.length - 1) {
+      if (event.key === 'ArrowRight' && step < steps.length - 1) {
         event.preventDefault()
         setStep((value) => value + 1)
       }
@@ -168,7 +174,7 @@ export function OnboardingFlow({ onClose }: OnboardingFlowProps) {
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
         <div className="onboarding-visual">
-          <span className="onboarding-count">{step + 1} / {STEPS.length}</span>
+          <span className="onboarding-count">{step + 1} / {steps.length}</span>
           {current.visual}
         </div>
         <div className="onboarding-copy" aria-live="polite">
@@ -178,7 +184,7 @@ export function OnboardingFlow({ onClose }: OnboardingFlowProps) {
         </div>
         <footer className="onboarding-footer">
           <div className="onboarding-dots" aria-label="新手引导步骤">
-            {STEPS.map((item, index) => (
+            {steps.map((item, index) => (
               <button
                 key={item.title}
                 type="button"
@@ -191,7 +197,7 @@ export function OnboardingFlow({ onClose }: OnboardingFlowProps) {
           </div>
           <div className="onboarding-actions">
             {step > 0 ? <button type="button" onClick={() => setStep((value) => value - 1)}>上一步</button> : null}
-            {step < STEPS.length - 1
+            {step < steps.length - 1
               ? <button className="onboarding-primary" type="button" onClick={() => setStep((value) => value + 1)}>下一步 →</button>
               : <button className="onboarding-primary" type="button" onClick={finish}>开始创作</button>}
           </div>

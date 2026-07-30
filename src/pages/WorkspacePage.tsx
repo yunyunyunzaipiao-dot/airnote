@@ -12,6 +12,12 @@ import { WorkspaceCanvas } from '../components/WorkspaceCanvas'
 import { ZoomControl } from '../components/ZoomControl'
 import { exportProjectJpg, exportProjectPng } from '../export/pngExport'
 import { exportProjectJson, readProjectFile } from '../export/projectTransfer'
+import {
+  getShortcutPlatform,
+  hasBlockingShortcutDialog,
+  hasPrimaryModifier,
+  isEditableShortcutTarget,
+} from '../keyboard/shortcuts'
 import { useAirNoteRuntime } from '../store/useAirNoteRuntime'
 
 export function WorkspacePage() {
@@ -21,6 +27,7 @@ export function WorkspacePage() {
   const [showCameraConsent, setShowCameraConsent] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(() => !hasCompletedOnboarding())
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([])
+  const [cancelInteractionSignal, setCancelInteractionSignal] = useState(0)
   const statusCenter = useStatusCenter()
 
   useEffect(() => {
@@ -34,23 +41,47 @@ export function WorkspacePage() {
   }, [runtime.uiState.errorMessage, statusCenter.push])
 
   useEffect(() => {
-    const handleToolShortcut = (event: KeyboardEvent) => {
-      const target = event.target
-      const isEditing = target instanceof HTMLElement
-        && Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
+    const handleWorkspaceShortcut = (event: KeyboardEvent) => {
       const calibrationOpen = runtime.uiState.cameraStatus === 'running'
         && runtime.calibration.phase !== 'ready'
       if (
-        event.ctrlKey
-        || event.metaKey
-        || event.altKey
-        || isEditing
+        isEditableShortcutTarget(event.target)
+        || hasBlockingShortcutDialog()
         || showOnboarding
         || showCameraConsent
         || calibrationOpen
       ) return
 
+      const platform = getShortcutPlatform()
       const key = event.key.toLowerCase()
+      if (hasPrimaryModifier(event, platform) && !event.altKey) {
+        if (key === 'z') {
+          event.preventDefault()
+          if (event.shiftKey) runtime.redo()
+          else runtime.undo()
+          return
+        }
+        if (event.key === '+' || event.key === '=' || event.key === '-' || event.key === '_') {
+          event.preventDefault()
+          const direction = event.key === '+' || event.key === '=' ? 1 : -1
+          const zoom = Math.min(3, Math.max(0.25, Math.round((viewport.zoom + direction * 0.25) * 100) / 100))
+          runtime.setViewport({ zoom })
+        }
+        return
+      }
+
+      if (event.ctrlKey || event.metaKey || event.altKey) return
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setCancelInteractionSignal((value) => value + 1)
+        return
+      }
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedCardIds.length === 1 && !event.repeat) {
+        event.preventDefault()
+        runtime.commitCardDelete(selectedCardIds[0])
+        return
+      }
+
       const toolByKey = {
         v: 'select',
         p: 'draw',
@@ -69,15 +100,21 @@ export function WorkspacePage() {
       }
     }
 
-    window.addEventListener('keydown', handleToolShortcut)
-    return () => window.removeEventListener('keydown', handleToolShortcut)
+    window.addEventListener('keydown', handleWorkspaceShortcut)
+    return () => window.removeEventListener('keydown', handleWorkspaceShortcut)
   }, [
     runtime.addTextCard,
     runtime.calibration.phase,
+    runtime.commitCardDelete,
+    runtime.redo,
     runtime.setTool,
+    runtime.setViewport,
     runtime.uiState.cameraStatus,
+    runtime.undo,
+    selectedCardIds,
     showCameraConsent,
     showOnboarding,
+    viewport.zoom,
   ])
 
   const confirmClear = () => {
@@ -225,6 +262,7 @@ export function WorkspacePage() {
             onUpdateEdge={runtime.commitEdgeType}
             onEdgeTypeChange={runtime.setEdgeType}
             onSelectionChange={setSelectedCardIds}
+            cancelInteractionSignal={cancelInteractionSignal}
           />
         </div>
 
@@ -249,8 +287,13 @@ export function WorkspacePage() {
           <CardPropertyPanel
             card={selectedCardIds.length === 1 ? runtime.document.cards.find((c) => c.id === selectedCardIds[0]) ?? null : null}
             onUpdateTextCard={runtime.commitTextCardUpdate}
+            onRenameCard={runtime.commitCardRename}
+            onRestoreInkCard={runtime.commitInkCardRestore}
             onDeleteCard={runtime.commitCardDelete}
-            onClose={() => setSelectedCardIds([])}
+            onClose={() => {
+              setSelectedCardIds([])
+              setCancelInteractionSignal((value) => value + 1)
+            }}
           />
         </div>
         <ZoomControl zoom={viewport.zoom} onZoomChange={(zoom) => runtime.setViewport({ zoom })} />

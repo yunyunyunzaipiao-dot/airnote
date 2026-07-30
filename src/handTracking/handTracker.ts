@@ -2,8 +2,14 @@ import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision'
 import type { HandFrame, NormalizedPoint } from '../types/m0'
 
 const baseUrl = import.meta.env.BASE_URL
-const wasmPath = `${baseUrl}mediapipe/wasm`
-const modelPath = `${baseUrl}mediapipe/models/hand_landmarker.task`
+const localMediapipeBaseUrl = `${baseUrl}mediapipe`
+
+const mediapipeBaseUrl = (
+  import.meta.env.VITE_MEDIAPIPE_ASSET_BASE_URL || localMediapipeBaseUrl
+).replace(/\/+$/, '')
+
+const wasmPath = `${mediapipeBaseUrl}/wasm`
+const modelPath = `${mediapipeBaseUrl}/models/hand_landmarker.task`
 export const MEDIAPIPE_ASSET_VERSION = '0.10.35-airnote-1'
 
 export const HAND_TRACKING_CONFIDENCE = {
@@ -49,15 +55,38 @@ export function versionAssetUrl(url: string) {
 }
 
 async function loadModelAsset() {
-  const response = await fetch(versionAssetUrl(modelPath), { cache: 'no-store' })
-  if (!response.ok) {
-    throw new Error(`hand-landmarker-model-http-${response.status}`)
+  const url = versionAssetUrl(modelPath)
+  let lastError: unknown
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        cache: attempt === 0 ? 'no-store' : 'reload',
+      })
+
+      if (!response.ok) {
+        throw new Error(`hand-landmarker-model-http-${response.status}`)
+      }
+
+      const model = new Uint8Array(await response.arrayBuffer())
+
+      if (model.byteLength === 0) {
+        throw new Error('hand-landmarker-model-empty')
+      }
+
+      return model
+    } catch (error) {
+      lastError = error
+
+      if (attempt < 2) {
+        await new Promise((resolve) => {
+          window.setTimeout(resolve, 800 * (attempt + 1))
+        })
+      }
+    }
   }
-  const model = new Uint8Array(await response.arrayBuffer())
-  if (model.byteLength === 0) {
-    throw new Error('hand-landmarker-model-empty')
-  }
-  return model
+
+  throw lastError ?? new Error('hand-landmarker-model-load-failed')
 }
 
 export async function createHandTracker(): Promise<HandTracker> {

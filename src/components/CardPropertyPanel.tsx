@@ -1,47 +1,49 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { IdeaCard, TextCardStyle } from '../types/workspace'
 
 interface CardPropertyPanelProps {
   card: IdeaCard | null
   onUpdateTextCard?: (cardId: string, patch: { textStyle?: Partial<TextCardStyle> }) => void
+  onRenameCard?: (cardId: string, title: string) => void
+  onRestoreInkCard?: (cardId: string) => void
   onDeleteCard?: (cardId: string) => void
   onClose?: () => void
 }
 
 const TEXT_COLORS = [
-  '#1D1D1F', '#FF453A', '#0A84FF', '#30A46C',
-  '#F59E0B', '#8B5CF6', '#EC4899', '#6E6E73',
+  { color: '#172B3A', label: '深色' },
+  { color: '#0A84FF', label: '蓝色' },
+  { color: '#30A46C', label: '绿色' },
+  { color: '#FF9500', label: '橙色' },
+  { color: '#FF453A', label: '红色' },
+  { color: '#8B5CF6', label: '紫色' },
+  { color: '#EC4899', label: '粉色' },
 ]
 
 export function CardPropertyPanel({
   card,
   onUpdateTextCard,
+  onRenameCard,
+  onRestoreInkCard,
   onDeleteCard,
   onClose,
 }: CardPropertyPanelProps) {
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [draftTitle, setDraftTitle] = useState(card?.title ?? '')
+
+  useEffect(() => {
+    setDraftTitle(card?.title ?? '')
+  }, [card?.id, card?.title])
 
   if (!card) return null
 
-  const handleDelete = () => {
-    if (!confirmDelete) {
-      setConfirmDelete(true)
-      return
-    }
-    onDeleteCard?.(card.id)
-    setConfirmDelete(false)
-  }
-
-  const handleClose = () => {
-    setConfirmDelete(false)
-    onClose?.()
-  }
-
   return (
-    <div className="card-property-panel" role="dialog" aria-label="卡片属性">
+    <aside
+      className={`card-property-panel card-property-panel--${card.kind}`}
+      aria-label={`${card.kind === 'text' ? '文字' : '墨迹'}卡片属性`}
+    >
       <div className="card-property-panel__header">
         <span>{card.kind === 'text' ? '文字卡片' : '墨迹卡片'}</span>
-        <button type="button" className="card-property-panel__close" onClick={handleClose} aria-label="关闭">×</button>
+        <button type="button" className="card-property-panel__close" onClick={onClose} aria-label="关闭卡片属性">×</button>
       </div>
 
       {card.kind === 'text' ? (
@@ -52,7 +54,8 @@ export function CardPropertyPanel({
               <button
                 type="button"
                 className={card.textStyle.bold ? 'is-active' : ''}
-                aria-label="加粗"
+                aria-label="B"
+                title="加粗"
                 aria-pressed={card.textStyle.bold}
                 onClick={() => onUpdateTextCard?.(card.id, { textStyle: { bold: !card.textStyle.bold } })}
               >
@@ -61,7 +64,8 @@ export function CardPropertyPanel({
               <button
                 type="button"
                 className={card.textStyle.italic ? 'is-active' : ''}
-                aria-label="斜体"
+                aria-label="I"
+                title="斜体"
                 aria-pressed={card.textStyle.italic}
                 onClick={() => onUpdateTextCard?.(card.id, { textStyle: { italic: !card.textStyle.italic } })}
               >
@@ -70,7 +74,8 @@ export function CardPropertyPanel({
               <button
                 type="button"
                 className={card.textStyle.underline ? 'is-active' : ''}
-                aria-label="下划线"
+                aria-label="U"
+                title="下划线"
                 aria-pressed={card.textStyle.underline}
                 onClick={() => onUpdateTextCard?.(card.id, { textStyle: { underline: !card.textStyle.underline } })}
               >
@@ -82,36 +87,67 @@ export function CardPropertyPanel({
           <div className="card-property-panel__section">
             <span className="card-property-panel__label">文字颜色</span>
             <div className="card-property-panel__colors">
-              {TEXT_COLORS.map((color) => (
+              {TEXT_COLORS.map(({ color, label }) => (
                 <button
                   key={color}
                   type="button"
                   className={`card-property-panel__color-dot ${card.textStyle.color === color ? 'is-active' : ''}`}
-                  aria-label={`颜色 ${color}`}
-                  style={{ backgroundColor: color, borderColor: color === '#FFFFFF' ? '#ddd' : color }}
+                  aria-label={`文字颜色：${label}`}
+                  aria-pressed={card.textStyle.color === color}
+                  style={{ backgroundColor: color }}
                   onClick={() => onUpdateTextCard?.(card.id, { textStyle: { color } })}
                 />
               ))}
             </div>
           </div>
         </>
-      ) : null}
-
-      <div className="card-property-panel__section">
-        {confirmDelete ? (
-          <div className="card-property-panel__confirm">
-            <span>确认删除？</span>
-            <div className="card-property-panel__confirm-actions">
-              <button type="button" onClick={() => setConfirmDelete(false)}>取消</button>
-              <button type="button" className="is-danger" onClick={handleDelete}>确认</button>
-            </div>
+      ) : (
+        <>
+          <div className="card-property-panel__section card-property-panel__annotation">
+            <label className="card-property-panel__label" htmlFor={`ink-card-title-${card.id}`}>标注</label>
+            <input
+              id={`ink-card-title-${card.id}`}
+              maxLength={100}
+              value={draftTitle}
+              onChange={(event) => setDraftTitle(event.target.value)}
+              onBlur={() => {
+                if (draftTitle !== card.title) onRenameCard?.(card.id, draftTitle)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  event.currentTarget.blur()
+                }
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  setDraftTitle(card.title)
+                }
+              }}
+            />
           </div>
-        ) : (
-          <button type="button" className="card-property-panel__delete" onClick={handleDelete}>
-            删除卡片{card.kind === 'ink' ? '（含笔迹）' : ''}
-          </button>
-        )}
+          <div className="card-property-panel__section card-property-panel__restore-section">
+            <button
+              type="button"
+              className="card-property-panel__restore"
+              onClick={() => onRestoreInkCard?.(card.id)}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 4v6h6M5.4 9.2A8 8 0 1 1 4 13" />
+              </svg>
+              恢复为自由笔迹
+            </button>
+          </div>
+        </>
+      )}
+
+      <div className="card-property-panel__section card-property-panel__delete-section">
+        <button type="button" className="card-property-panel__delete" onClick={() => onDeleteCard?.(card.id)}>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v6m4-6v6" />
+          </svg>
+          删除卡片{card.kind === 'ink' ? '（含笔迹）' : ''}
+        </button>
       </div>
-    </div>
+    </aside>
   )
 }

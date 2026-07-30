@@ -48,6 +48,7 @@ import {
   moveCards,
   projectFromDocument,
   renameCard,
+  restoreInkCard,
   resizeCard,
   strokeIdAtPoint,
   suggestGroupFromSelection,
@@ -867,12 +868,27 @@ export function useAirNoteRuntime() {
 
   const commitCardDelete = useCallback((cardId: string) => {
     const before = documentRef.current
+    const card = before.cards.find((item) => item.id === cardId)
+    if (!card) return
     const strokeCount = before.strokes.filter((stroke) => stroke.cardId === cardId).length
     const edgeCount = before.edges.filter((edge) => edge.sourceCardId === cardId || edge.targetCardId === cardId).length
-    if (!window.confirm(`删除卡片将同时删除${strokeCount}条笔迹和${edgeCount}条连接线。此操作可撤销。`)) return
+    const confirmation = card.kind === 'ink'
+      ? `删除墨迹卡片将同时删除${strokeCount}条笔迹和${edgeCount}条连接线。此操作可撤销。`
+      : `删除文字卡片将同时删除${edgeCount}条连接线。此操作可撤销。`
+    if (!window.confirm(confirmation)) return
     const after = deleteCard(before, cardId)
     applyDocument(after)
     publishHistory(pushHistory(historyRef.current, { type: 'DELETE_CARD', before, after }))
+    setWorkspaceMessage('卡片已删除，可撤销。')
+  }, [applyDocument, publishHistory])
+
+  const commitInkCardRestore = useCallback((cardId: string) => {
+    const before = documentRef.current
+    const after = restoreInkCard(before, cardId)
+    if (after === before) return
+    applyDocument(after)
+    publishHistory(pushHistory(historyRef.current, { type: 'RESTORE_INK_CARD', before, after }))
+    setWorkspaceMessage('已恢复为自由笔迹，可撤销。')
   }, [applyDocument, publishHistory])
 
   const commitEdge = useCallback((sourceCardId: string, targetCardId: string, sourceAnchor: EdgeAnchor, targetAnchor: EdgeAnchor) => {
@@ -994,18 +1010,6 @@ export function useAirNoteRuntime() {
   }, [endGestureTrajectory, finishRendererStroke])
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return
-      if (event.key.toLowerCase() !== 'z') return
-      event.preventDefault()
-      if (event.shiftKey) redo()
-      else undo()
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [redo, undo])
-
-  useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
@@ -1067,6 +1071,7 @@ export function useAirNoteRuntime() {
     commitCardsMove,
     commitCardResize,
     commitCardRename,
+    commitInkCardRestore,
     commitCardDelete,
     commitEdge,
     commitEdgeType,

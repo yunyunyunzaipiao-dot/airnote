@@ -53,6 +53,7 @@ interface WorkspaceCanvasProps {
   onUpdateEdge: (edgeId: string, type: Edge['type']) => void
   onEdgeTypeChange: (type: Edge['type']) => void
   onSelectionChange?: (selectedCardIds: string[]) => void
+  cancelInteractionSignal?: number
 }
 
 function canvasPoint(
@@ -106,6 +107,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
   const [drag, setDrag] = useState<CardDragPreview | null>(null)
   const dragRef = useRef<CardDragPreview | null>(null)
   const dragFrameRef = useRef<number | null>(null)
+  const cancelInteractionSignalRef = useRef(props.cancelInteractionSignal)
   const [resize, setResize] = useState<{
     cardId: string
     pointerId: number
@@ -126,6 +128,26 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps) {
   useEffect(() => {
     props.onSelectionChange?.([...selectedCardIds])
   }, [selectedCardIds, props.onSelectionChange])
+
+  useEffect(() => {
+    if (props.cancelInteractionSignal === cancelInteractionSignalRef.current) return
+    cancelInteractionSignalRef.current = props.cancelInteractionSignal
+    if (dragFrameRef.current !== null) {
+      if (typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(dragFrameRef.current)
+      else window.clearTimeout(dragFrameRef.current)
+      dragFrameRef.current = null
+    }
+    dragRef.current = null
+    setDrag(null)
+    setResize(null)
+    setEdgeDraft(null)
+    setPendingEdgeDraft(null)
+    setShowEdgeTypePicker(false)
+    setSelectedEdgeId(null)
+    setSelectedCardIds(new Set())
+    setSelection(null)
+    setPan(null)
+  }, [props.cancelInteractionSignal])
 
   useEffect(() => {
     if (tool !== 'lasso-rect' && tool !== 'lasso-free') {

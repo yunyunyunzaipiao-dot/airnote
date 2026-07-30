@@ -261,6 +261,28 @@ export function deleteCard(document: WorkspaceDocument, cardId: string) {
   })
 }
 
+export function restoreInkCard(document: WorkspaceDocument, cardId: string) {
+  const card = document.cards.find((item) => item.id === cardId)
+  if (!card || card.kind !== 'ink') return document
+  const restoredStrokeIds = new Set(card.strokeIds)
+  return touch({
+    ...document,
+    cards: document.cards.filter((item) => item.id !== cardId),
+    edges: document.edges.filter((edge) => edge.sourceCardId !== cardId && edge.targetCardId !== cardId),
+    strokes: document.strokes.map((stroke) => {
+      if (!restoredStrokeIds.has(stroke.id) && stroke.cardId !== cardId) return stroke
+      const { cardId: _cardId, ...freeStroke } = stroke
+      return freeStroke
+    }),
+    groups: document.groups
+      .map((group) => ({
+        ...group,
+        strokeIds: group.strokeIds.filter((strokeId) => !restoredStrokeIds.has(strokeId)),
+      }))
+      .filter((group) => group.strokeIds.length > 0),
+  })
+}
+
 function distanceToSegment(
   point: { x: number; y: number },
   start: { x: number; y: number },

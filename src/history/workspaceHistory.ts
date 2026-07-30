@@ -12,6 +12,7 @@ export type WorkspaceCommandType =
   | 'MOVE_CARDS'
   | 'RESIZE_CARD'
   | 'RENAME_CARD'
+  | 'RESTORE_INK_CARD'
   | 'DELETE_CARD'
   | 'CREATE_EDGE'
   | 'UPDATE_EDGE'

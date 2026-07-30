@@ -22,6 +22,10 @@ function renderApp() {
   return render(<App />)
 }
 
+function setPlatform(platform: string) {
+  Object.defineProperty(window.navigator, 'platform', { configurable: true, value: platform })
+}
+
 function confirmCameraConsent() {
   fireEvent.click(screen.getByRole('button', { name: '启用摄像头' }))
   fireEvent.click(screen.getByRole('button', { name: '继续启用摄像头' }))
@@ -99,6 +103,7 @@ describe('AirNote M1 workspace', () => {
     localStorage.setItem('airnote-onboarding-done', '1')
     mockedCreateHandTracker.mockResolvedValue({ detect: vi.fn(), close: vi.fn() })
     mockedStartVideoFrameLoop.mockReturnValue({ stop: vi.fn() })
+    setPlatform('Win32')
     Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true })
     Object.defineProperty(window, 'PointerEvent', { configurable: true, value: MouseEvent })
     Object.defineProperty(HTMLCanvasElement.prototype, 'clientWidth', { configurable: true, get: () => 800 })
@@ -133,6 +138,8 @@ describe('AirNote M1 workspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '前往第 6 步：开始创作' }))
     expect(screen.getByText('6 / 6')).toBeInTheDocument()
+    expect(screen.getByText('Ctrl+Z')).toBeInTheDocument()
+    expect(screen.getByText('Ctrl+Shift+Z')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '开始创作' }))
     expect(localStorage.getItem('airnote-onboarding-done')).toBe('1')
     expect(screen.queryByRole('dialog', { name: '开始创作' })).not.toBeInTheDocument()
@@ -150,6 +157,20 @@ describe('AirNote M1 workspace', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('shows macOS shortcut labels in onboarding and top-bar hints', () => {
+    setPlatform('MacIntel')
+    localStorage.removeItem('airnote-onboarding-done')
+
+    renderApp()
+    fireEvent.click(screen.getByRole('button', { name: '前往第 6 步：开始创作' }))
+
+    expect(screen.getByText('⌘Z')).toBeInTheDocument()
+    expect(screen.getByText('⌘⇧Z')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '开始创作' }))
+    expect(screen.getByRole('button', { name: '撤销' })).toHaveAttribute('title', '撤销：⌘Z')
+    expect(screen.getByRole('button', { name: '重做' })).toHaveAttribute('title', '重做：⌘⇧Z')
+  })
+
   it('uses single-key tool shortcuts outside editing fields', () => {
     renderApp()
 
@@ -157,12 +178,76 @@ describe('AirNote M1 workspace', () => {
     expect(screen.getByRole('button', { name: '平移画布' })).toHaveAttribute('aria-pressed', 'true')
     fireEvent.keyDown(window, { key: 'v' })
     expect(screen.getByRole('button', { name: '选择卡片' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: '打开界面主题' }))
+    fireEvent.keyDown(window, { key: 'p' })
+    expect(screen.getByRole('button', { name: '选择卡片' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.keyDown(document, { key: 'Escape' })
     fireEvent.keyDown(window, { key: 't' })
     expect(screen.getByRole('textbox', { name: '编辑文字卡片 未命名文字' })).toBeInTheDocument()
 
     const body = screen.getByRole('textbox', { name: '编辑文字卡片 未命名文字' })
     fireEvent.keyDown(body, { key: 'p' })
     expect(screen.getByRole('button', { name: '选择卡片' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.keyDown(body, { key: 'z', ctrlKey: true })
+    expect(screen.getByRole('button', { name: '撤销' })).toBeEnabled()
+    fireEvent.keyDown(body, { key: '+', ctrlKey: true, shiftKey: true })
+    expect(screen.getByRole('button', { name: '重置缩放' })).toHaveTextContent('100%')
+  })
+
+  it('uses Ctrl shortcuts for history and zoom on Windows', () => {
+    renderApp()
+    drawMouseStroke()
+    const undo = screen.getByRole('button', { name: '撤销' })
+    const redo = screen.getByRole('button', { name: '重做' })
+    expect(undo).toBeEnabled()
+
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true })
+    expect(undo).toBeDisabled()
+    expect(redo).toBeEnabled()
+    fireEvent.keyDown(window, { key: 'Z', ctrlKey: true, shiftKey: true })
+    expect(undo).toBeEnabled()
+    expect(redo).toBeDisabled()
+
+    const zoom = screen.getByRole('button', { name: '重置缩放' })
+    expect(zoom).toHaveTextContent('100%')
+    fireEvent.keyDown(window, { key: '+', ctrlKey: true, shiftKey: true })
+    expect(zoom).toHaveTextContent('125%')
+    fireEvent.keyDown(window, { key: '-', ctrlKey: true })
+    expect(zoom).toHaveTextContent('100%')
+  })
+
+  it('uses Command shortcuts on macOS without intercepting Ctrl', () => {
+    setPlatform('MacIntel')
+    renderApp()
+    drawMouseStroke()
+    const undo = screen.getByRole('button', { name: '撤销' })
+
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true })
+    expect(undo).toBeEnabled()
+    fireEvent.keyDown(window, { key: 'z', metaKey: true })
+    expect(undo).toBeDisabled()
+    fireEvent.keyDown(window, { key: 'z', metaKey: true, shiftKey: true })
+    expect(undo).toBeEnabled()
+    fireEvent.keyDown(window, { key: '+', metaKey: true, shiftKey: true })
+    expect(screen.getByRole('button', { name: '重置缩放' })).toHaveTextContent('125%')
+  })
+
+  it('deletes one selected card with Delete and clears selection with Escape', () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const { container } = renderApp()
+    fireEvent.click(screen.getByRole('button', { name: '新建文字卡片' }))
+    fireEvent.keyDown(screen.getByRole('textbox', { name: '卡片文字注释' }), { key: 'Escape' })
+    expect(container.querySelector('.idea-card--selected')).not.toBeNull()
+
+    fireEvent.keyDown(window, { key: 'Delete' })
+    expect(confirm).toHaveBeenCalledTimes(1)
+    expect(container.querySelector('.idea-card')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '新建文字卡片' }))
+    fireEvent.keyDown(screen.getByRole('textbox', { name: '卡片文字注释' }), { key: 'Escape' })
+    expect(container.querySelector('.idea-card--selected')).not.toBeNull()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(container.querySelector('.idea-card--selected')).toBeNull()
   })
 
   it('creates a basic text card and applies whole-card formatting', () => {
