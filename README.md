@@ -1,49 +1,225 @@
+<p align="center">
+  <a href="./README.zh-CN.md"><kbd>简体中文</kbd></a>
+  <a href="./README.md"><kbd>English</kbd></a>
+</p>
+
 # AirNote / 空书
 
-AirNote 是使用 React、TypeScript 和 Vite 构建的桌面网页工具。当前成立版本为 M4 完整 P0 里程碑 `0.5.0-m4.1`；当前开发阶段已进入 P1，首先实现可关闭、可降级的 `STYLE-01` 实验视觉。
+**An experimental creative scratchpad for generative art and creative coding.**
 
-完整 P0 链路为：摄像头或鼠标输入 → 正式 Stroke → 笔画分组 → 用户确认生成卡片 → 卡片整理与连接 → 本地自动保存与刷新恢复 → PNG/项目 JSON 导出与安全导入。P1 实验视觉默认关闭，关闭时始终使用 Ink。
+**Status: P0 MVP complete (`0.5.0-m4.1`) · P1 hypothesis exploration**
 
-## 环境要求
+## Quick Overview
 
-- Node.js 24.x
-- npm 11.x
-- 桌面 Chrome 或 Edge
+AirNote explores whether **imprecise, lower-pressure input can help creators externalize visual ideas before they are fully formed.** Its P0 MVP covers camera gesture / mouse input → Stroke → Group Suggestion → user confirmation → Card → Connection. Based on my own use after completing the MVP, I returned more often to free drawing than to Card / Edge organization, leading to a new direction: `Draw → Transform → Discover`. Whether visual variations can help creators discover a next step remains an unvalidated hypothesis.
 
-## 安装
+![AirNote prototype showing strokes, cards, and connections](./docs/media/readme/ink-card-selection.png)
 
-```bash
-npm install
-```
+<p align="center"><sub>P0 MVP: from free-form strokes to Cards and Connections.</sub></p>
 
-## 换机恢复
+### Gesture Drawing Demo
+
+<a href="./docs/media/readme/gesture-drawing.mp4">
+  <img src="./docs/media/readme/gesture-drawing.gif" alt="AirNote gesture drawing demo" width="100%">
+</a>
+
+<p align="center"><sub>Gesture drawing demo · Click the GIF to watch the original MP4.</sub></p>
+
+## Why I Built It
+
+AirNote began with a problem I encountered while using TouchDesigner and generative art tools: I often had only a vague visual feeling, but found it difficult to decide what effect to try next through thought alone.
+
+High-precision drawing tools are well suited to expression and refinement, but they do not always solve the question of “what should I try next?” when an idea is still taking shape. I wanted to test a less precise, lower-pressure form of expression: leaving Strokes through an ordinary camera gesture or mouse first, then observing whether those marks could help the idea develop.
+
+Many gesture-drawing demos I encountered emphasized the input effect itself, with less attention to a usable flow for undoing, saving, organizing, and continuing the work. AirNote's first phase therefore went beyond “drawing in the air” and built a reusable MVP loop.
+
+## Initial Product Hypothesis
+
+The first product hypothesis was:
+
+> A vague idea can first be externalized through free-form strokes, and the user can then decide whether to organize it into a structure.
+
+The corresponding path was:
+
+**Draw → Organize**
+
+**Camera Gesture / Mouse → Stroke → Group Suggestion → User Confirmation → Card → Connection**
+
+The system only proposes a group; it does not automatically interpret or submit the content. Cards and Edges test whether users need to name, move, and connect their ideas after preserving the original strokes.
+
+## MVP Decisions / Product Trade-offs
+
+| Product decision | Why | Trade-off |
+|---|---|---|
+| Use the web and an ordinary camera | No XR device, depth camera, or dedicated client is required | Ordinary cameras are more sensitive to lighting, occlusion, device performance, and tracking accuracy |
+| Preserve mouse fallback | Camera access may be denied, occupied, or unreliable; prolonged arm use can also be tiring | The product is not gesture-only, and reliable editing still uses the mouse |
+| Treat Stroke as the source of truth | Cards, visual styles, and later experiments must not overwrite the user's original marks | Derived capabilities must remain separate from the original data |
+| Ask for confirmation after grouping, then create a Card | Stopping a stroke does not mean the system understands the user's intent | Adds one action, but avoids premature structuring and accidental submission |
+| Include Card / Edge in the first phase | Tests whether naming, moving, and connecting help ideas develop after free drawing | Organization adds interaction cost and may pull attention away from drawing |
+| Defer OCR, backend, and cloud sync | Prioritizes a local MVP while avoiding upload, key, cost, account, and privacy issues | No handwriting recognition, online project management, or cross-device sync |
+| Do not use an LLM for automatic organization | There is no evidence yet that automatic naming, moving, or merging helps this creative stage | No AI content generation, automatic classification, or automatic mind maps |
+
+## Current Prototype
+
+The P0 MVP supports the following main path:
+
+**Camera Gesture / Mouse**\
+**→ Stroke**\
+**→ Group Suggestion**\
+**→ User Confirmation → Card**\
+**→ Card / Edge Organization**\
+**→ Local Save and Project Import / Export**
+
+The current prototype includes:
+
+- camera gesture and mouse input, with the core experience available when the camera is unavailable;
+- pinch to draw, and stroke termination on release or tracking loss;
+- Stroke creation, undo, redo, confirmed clearing, and whole-stroke erasing;
+- group suggestions after drawing stops, followed by user-confirmed Card creation;
+- Card movement, editing, deletion, and Edge connections;
+- local autosave and project import / export;
+- stable Ink rendering and optional, degradable Glow / Particle visual variations.
+
+Glow and Particle exist as rendering capabilities, but this does not mean they have been shown to improve creative divergence.
+
+<details>
+<summary><strong>View prototype gallery</strong></summary>
+
+<br>
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="./docs/media/readme/calibration-roi.png" alt="Gesture writing-area calibration">
+      <br><sub>Gesture writing-area calibration</sub>
+    </td>
+    <td width="50%">
+      <img src="./docs/media/readme/gesture-test.png" alt="Gesture drawing test">
+      <br><sub>Gesture drawing test</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="./docs/media/readme/card-connection.png" alt="Card and Edge connection interaction">
+      <br><sub>Card and Edge connection interaction</sub>
+    </td>
+    <td width="50%">
+      <img src="./docs/media/readme/design-system.png" alt="AirNote design system">
+      <br><sub>AirNote design system</sub>
+    </td>
+  </tr>
+</table>
+
+</details>
+
+## What Changed After the MVP
+
+After completing P0, I revisited how I actually used the prototype.
+
+The original hypothesis was:
+
+**Draw → Organize**
+
+But in my own use, what I kept returning to—and found more engaging—was **free drawing itself**, rather than the later Card / Edge organization.
+
+This raised a new product question:
+
+> If the same original Stroke produces different visual variations, might a creator see a next step they had not previously imagined?
+
+The direction now being explored is:
+
+**Draw → Transform → Discover**
+
+This is a personal observation from using the prototype, not a user-research conclusion. It neither proves the new direction nor invalidates Card / Edge. The original MVP remains a real first-phase product decision and development result.
+
+The project is not centered on an LLM, but it gave me direct experience with problem definition, MVP trade-offs, validation boundaries, and revising a product hypothesis.
+
+## Next Validation
+
+The next phase needs to test both whether visual variations are valuable and whether that value can recur.
+
+### What to Test
+
+- Can a user form a specific creative direction from a visual variation that they did not have before?
+- Will the user continue drawing or developing one of the results?
+- Does the user describe the result as merely “visually appealing,” or as something that “helped me think of the next step”?
+- At which stage are Card / Edge and Visual Variation useful?
+- Does the effect remain after repeated use?
+
+### How to Test
+
+The planned method is **small-scale qualitative task testing**:
+
+1. Invite people working with generative art, creative coding, or visual creation to complete an open-ended task.
+2. Let them draw freely first while preserving the unchanged original Stroke.
+3. Provide a small number of Visual Variations derived from that same Stroke and let them choose whether to develop one.
+4. Observe whether they form a new, specific direction, continue interacting, and need Card / Edge at any stage.
+5. Conduct a short follow-up interview to distinguish visual novelty from practical creative help.
+6. When possible, follow up later to see whether the value is limited to a first-time experience.
+
+The sample size has not yet been determined, and the test does not assume in advance that the new direction will succeed.
+
+## Current Boundaries
+
+### Implemented
+
+- Camera gesture and mouse input
+- Original Stroke creation and preservation
+- Group Suggestion and user-confirmed Card creation
+- Card / Edge organization
+- Undo, redo, and recoverable editing
+- Local save and project import / export
+- Optional Glow / Particle visual variations
+
+### Not Yet Validated
+
+- Whether Card / Edge is the core value or an optional later-stage organization tool
+- Whether Visual Variation actually supports creative divergence
+- Whether users would continue using this process
+- Whether it improves creative efficiency or creative quality
+- Whether `Draw → Transform → Discover` is more valuable than the first-phase path
+
+### Not Implemented
+
+- OCR or handwriting recognition
+- LLM-based automatic naming, classification, or organization
+- Backend, accounts, or cloud sync
+- Multiplayer collaboration or public sharing
+- Integration with TouchDesigner, Blender, Processing, or other external tools
+- Multiple workspaces / multi-project management
+
+These items are not roadmap commitments and do not imply that the capabilities already exist.
+
+## Run Locally
+
+Requirements: Node.js 24.x, npm 11.x, and desktop Chrome or Edge.
 
 ```bash
 git clone https://github.com/yunyunyunzaipiao-dot/airnote.git
 cd airnote
 npm ci
-npm run typecheck
-npm test
-npm run build
-```
-
-使用 Node.js 24.x 和 npm 11.x；依赖版本由 `package-lock.json` 锁定。MediaPipe WASM 与手部模型已保存在 `public/mediapipe/`，核心功能不需要额外下载模型，也不需要项目级环境变量。
-
-GitHub 只保存源码、产品文档、测试、非敏感工程配置和本地模型资产。`node_modules/`、`dist/`、日志、临时文件与 `.env*` 不进入仓库；浏览器中的工作区和校准设置也不会自动跨电脑同步，需要在旧电脑使用“导出项目”，再在新电脑使用“导入项目”。Git 用户名、邮箱和 GitHub 登录凭据属于电脑级配置，需要在新电脑单独设置或登录。
-
-## 本地启动
-
-```bash
 npm run dev
 ```
 
-Vite 默认地址为 `http://localhost:5173/`。如果端口被占用，以终端显示的实际地址为准。
+The default local URL is `http://localhost:5173/`.
 
-页面加载不会请求摄像头权限。用户可直接使用鼠标绘图，或主动点击“启用摄像头”后完成/跳过校准并使用捏合手势绘图。
+The page does not request camera permission on load. Users can draw directly with the mouse, or actively enable the camera and use gesture drawing after completing or skipping calibration.
 
-顶部栏提供“导出图片”“导出项目”和“导入项目”：PNG 只包含画布笔迹、卡片与连接；项目 JSON 可再次导入编辑。导入文件会先完成格式、版本和引用校验，只有用户确认后才替换当前画布。
+## For Developers
 
-## 工程检查
+AirNote currently uses React, TypeScript, Vite, and a locally hosted MediaPipe Hand Landmarker. The engineering implementation serves the product hypothesis; the project is not primarily intended as a frontend technology showcase.
+
+### Project Structure
+
+- `src/camera/`, `src/handTracking/`, `src/gesture/`: camera, hand tracking, and gesture state
+- `src/drawing/`, `src/visualEffects/`: Stroke and experimental visual-variation rendering
+- `src/strokeGroups/`, `src/cards/`, `src/edges/`: grouping, Cards, and connections
+- `src/store/`, `src/history/`, `src/persistence/`: workspace state, history, and local persistence
+- `src/export/`: image and project-data import / export
+- `src/tests/`: automated tests
+- `public/mediapipe/`: local model and WASM resources
+
+### Engineering Checks
 
 ```bash
 npm run typecheck
@@ -51,40 +227,31 @@ npm test
 npm run build
 ```
 
-## 项目记录
+Automated tests check functional behavior, error handling, and data invariants. They do not prove that the product value or user need has been validated.
 
-- 每日开发进度：[`docs/progress/`](docs/progress/README.md)
-- 版本成立与变更记录流程：[`docs/VERSIONING.md`](docs/VERSIONING.md)
+### Privacy & Data Boundaries
 
-只有负责人明确批准版本成立后，才更新版本号、Changelog 和版本说明；Git 提交、标签与推送仍需明确授权。
+- The camera can only be enabled by the user.
+- Video frames and hand landmarks are processed in browser runtime memory.
+- Camera footage is not recorded, saved, or uploaded by default.
+- The workspace is stored locally in the browser.
+- Project JSON does not contain video, landmark streams, API keys, or access tokens.
+- Experimental visual variations must not overwrite or reorder the original `Stroke.points`.
 
-## 当前实现范围
+### Product & Development Records
 
-已实现：
+- [Product background document](./AirNote_01_产品背景文档_v0.3.docx)
+- [Product requirements document](./AirNote_02_产品需求文档_AI执行版_v0.3.docx)
+- [Product boundaries document](./AirNote_03_产品边界文档_v0.3.docx)
+- [Daily development progress](./docs/progress/README.md)
+- [Version and change records](./CHANGELOG.md)
+- [Versioning rules](./docs/VERSIONING.md)
 
-- `CAM-03` 四点书写区域与三次捏合/松开校准，支持明确跳过并使用默认参数
-- 校准参数、输入模式偏好和画笔属性本地保存
-- `INPT-01` 鼠标降级绘图，摄像头失败、关闭或刷新后仍可使用
-- `DRAW-01` 正式 Stroke 数据，少于两个有效点时丢弃
-- `DRAW-02` 镜像、ROI 映射、方向自适应 EMA 与 2 CSS 像素抽样
-- `DRAW-03` 颜色以及 2/4/8px 三档固定粗细，旧 Stroke 保留画笔快照
-- `EDIT-01` 至少 50 步撤销/重做与键盘快捷键
-- `EDIT-02` 确认清空和一次完整撤销
-- 输入切换、页面失焦、摄像头关闭、追踪丢失和 Canvas 尺寸变化时结束 activeStroke
-- `GROUP-01` 停笔 1.2 秒后显示分组建议，不自动生成卡片
-- `CARD-01` 用户确认生成引用原始 Stroke 的想法卡片
-- `CARD-02` 卡片移动、改名、删除和可撤销尺寸调整
-- `EDGE-01` 上下左右四向锚点、无向/有向连接及实时端点更新
-- `SAVE-01` 800ms 防抖本地保存、校验恢复和损坏副本保留
-- `SAVE-02` 画布内容 PNG 导出、项目 JSON 导出、全量校验后确认导入与立即本地保存
-- Stroke、Group、Card、Edge 和清空操作的完整工作区撤销/重做
-- `STYLE-01` 实验视觉开关、Glow 与临时 Particle 渲染、减少动态效果偏好和低帧率分级降级；不改写原始 `Stroke.points`
+### Detailed Feature Scope
 
-未实现：
+For complete feature IDs, failure handling, boundary conditions, and acceptance criteria, see:
 
-- OCR、后端、账号、云同步
-- `GEST-02` 张掌暂停、手势模式 2 和键盘自由文字
-
-## 隐私边界
-
-视频与关键点只在浏览器运行时内存处理，不录制、不保存、不上传。MediaPipe WASM 与模型从项目本地加载，不包含 API 密钥或外部服务配置。工作区本地快照只包含项目结构和设置，不包含视频帧、关键点流、历史栈、密钥或令牌。
+- [Product requirements document](./AirNote_02_产品需求文档_AI执行版_v0.3.docx)
+- [Product boundaries document](./AirNote_03_产品边界文档_v0.3.docx)
+- [CHANGELOG](./CHANGELOG.md)
+- [Daily development progress](./docs/progress/README.md)
